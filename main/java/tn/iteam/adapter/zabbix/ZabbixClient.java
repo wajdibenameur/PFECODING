@@ -75,7 +75,7 @@ public class ZabbixClient {
     private JsonNode executeRequest(Map<String, Object> payload, String context) {
         try {
             String prettyPayload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
-            log.info("➡️ Zabbix {} payload:\n{}", context, prettyPayload);
+            log.info(" Zabbix {} payload:\n{}", context, prettyPayload);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -95,9 +95,9 @@ public class ZabbixClient {
             JsonNode root = objectMapper.readTree(response.getBody());
 
             if (root.has("result")) {
-                log.info("✅ Successfully fetched {} {}", root.get("result").size(), context);
+                log.info(" Successfully fetched {} {}", root.get("result").size(), context);
 
-                // 🔥 AJOUT: afficher chaque problème JSON pour debug
+                //  AJOUT: afficher chaque problème JSON pour debug
                 if ("problems".equals(context) || "active problems by host".equals(context)) {
                     for (JsonNode p : root.get("result")) {
                         log.debug("Problem JSON node: {}", p.toPrettyString());
@@ -106,10 +106,10 @@ public class ZabbixClient {
 
                 return root.get("result");
             } else if (root.has("error")) {
-                log.error("❌ Zabbix API error: {}", root.get("error").toString());
+                log.error(" Zabbix API error: {}", root.get("error").toString());
             }
         } catch (Exception e) {
-            log.error("❌ Exception while fetching {} from Zabbix", context, e);
+            log.error(" Exception while fetching {} from Zabbix", context, e);
         }
         return objectMapper.createArrayNode();
     }
@@ -118,7 +118,7 @@ public class ZabbixClient {
         try {
             Map<String, Object> payload = createBasePayload("apiinfo.version");
             String prettyPayload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
-            log.info("➡️ Zabbix apiinfo.version request:\n{}", prettyPayload);
+            log.info(" Zabbix apiinfo.version request:\n{}", prettyPayload);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);

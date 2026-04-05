@@ -33,7 +33,7 @@ public class RestTemplateConfig {
     // --------------------------------------------------------------
     @Bean
     public RestTemplate restTemplateIgnoringSSL() {
-        log.info("🔓 Creating RestTemplate that ignores SSL validation");
+        log.info(" Creating RestTemplate that ignores SSL validation");
         try {
             SSLContext sslContext = SSLContextBuilder.create()
                     .loadTrustMaterial(null, TrustAllStrategy.INSTANCE)
@@ -59,7 +59,7 @@ public class RestTemplateConfig {
 
             RestTemplate restTemplate = new RestTemplate(factory);
             restTemplate.getInterceptors().add(new LoggingInterceptor());
-            log.info("✅ RestTemplate ignoring SSL created");
+            log.info(" RestTemplate ignoring SSL created");
             return restTemplate;
         } catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
             throw new RuntimeException("Failed to create SSL-disabled RestTemplate", e);
@@ -73,7 +73,7 @@ public class RestTemplateConfig {
     @Bean
     @Primary
     public RestTemplate restTemplate() {
-        log.info("🌐 Creating default RestTemplate bean with timeouts");
+        log.info(" Creating default RestTemplate bean with timeouts");
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000); // 5s pour la connexion
@@ -82,7 +82,7 @@ public class RestTemplateConfig {
         RestTemplate restTemplate = new RestTemplate(factory);
         restTemplate.getInterceptors().add(new LoggingInterceptor());
 
-        log.info("✅ Default RestTemplate bean created with timeouts");
+        log.info(" Default RestTemplate bean created with timeouts");
         return restTemplate;
     }
 

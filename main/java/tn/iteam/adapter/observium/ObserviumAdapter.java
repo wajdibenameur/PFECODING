@@ -28,7 +28,7 @@ public class ObserviumAdapter {
      * Récupère tous les devices et les transforme en DTO
      */
     public List<ServiceStatusDTO> fetchAll() {
-        log.info("🔍 Fetching data from Observium");
+        log.info(" Fetching data from Observium");
 
         JsonNode devices = observiumClient.getDevices();
         List<ServiceStatusDTO> dtos = new ArrayList<>();
@@ -42,11 +42,11 @@ public class ObserviumAdapter {
             dtos.add(observiumMapper.mapDeviceToDTO(deviceNode));
         }
 
-        log.info("🔍 {} devices fetched from Observium", dtos.size());
+        log.info(" {} devices fetched from Observium", dtos.size());
         return dtos;
     }
     public List<ObserviumProblemDTO> fetchProblems() {
-        log.info("🔍 Fetching problems from Observium");
+        log.info(" Fetching problems from Observium");
 
         JsonNode alerts = observiumClient.getAlerts();
         List<ObserviumProblemDTO> dtos = new ArrayList<>();
@@ -60,14 +60,14 @@ public class ObserviumAdapter {
             dtos.add(observiumMapper.mapAlertToDTO(alertNode));
         }
 
-        log.info("🔍 {} problems fetched from Observium", dtos.size());
+        log.info(" {} problems fetched from Observium", dtos.size());
         return dtos;
     }
 
     private final ObserviumProblemRepository problemRepository; // à injecter
 
     public List<ObserviumProblemDTO> fetchProblemsAndSave() {
-        log.info("🔍 Fetching problems from Observium");
+        log.info(" Fetching problems from Observium");
 
         JsonNode alerts = observiumClient.getAlerts();
         List<ObserviumProblemDTO> dtos = new ArrayList<>();
@@ -99,7 +99,7 @@ public class ObserviumAdapter {
 
         if(!entities.isEmpty()) {
             problemRepository.saveAll(entities);
-            log.info("🔍 {} problems saved to database", entities.size());
+            log.info(" {} problems saved to database", entities.size());
         }
 
         return dtos;

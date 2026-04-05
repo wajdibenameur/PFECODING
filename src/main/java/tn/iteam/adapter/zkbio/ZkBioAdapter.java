@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
 import tn.iteam.client.ZkBioClient;
 import tn.iteam.domain.ZkBioProblem;
 import tn.iteam.dto.ZkBioProblemDTO;
@@ -29,7 +30,7 @@ public class ZkBioAdapter {
      * Vérifie l'état du serveur ZKBio
      */
     public List<ServiceStatusDTO> fetchAll() {
-        log.info("🔐 Checking ZKBio server");
+        log.info(" Checking ZKBio server");
 
         List<ServiceStatusDTO> dtos = new ArrayList<>();
         ServiceStatusDTO dto = new ServiceStatusDTO();
@@ -43,12 +44,12 @@ public class ZkBioAdapter {
         try {
             if (zkBioClient.getDevices() != null) {
                 dto.setStatus("UP");
-                log.info("✅ ZKBio Server is UP");
+                log.info(" ZKBio Server is UP");
             } else {
-                log.warn("⚠️ ZKBio Server devices API returned null");
+                log.warn(" ZKBio Server devices API returned null");
             }
         } catch (Exception e) {
-            log.error("❌ Error connecting to ZKBio Server", e);
+            log.error(" Error connecting to ZKBio Server", e);
         }
 
         dtos.add(dto);
@@ -59,7 +60,7 @@ public class ZkBioAdapter {
      * Récupère les alertes/problèmes depuis ZKBio et les transforme en DTO
      */
     public List<ZkBioProblemDTO> fetchProblems() {
-        log.info("🔐 Fetching problems from ZKBio");
+        log.info(" Fetching problems from ZKBio");
 
         JsonNode alerts = zkBioClient.getAlerts();
         List<ZkBioProblemDTO> dtos = new ArrayList<>();
@@ -73,7 +74,7 @@ public class ZkBioAdapter {
             dtos.add(zkBioMapper.mapAlertToDTO(alertNode));
         }
 
-        log.info("🔐 {} problems fetched from ZKBio", dtos.size());
+        log.info(" {} problems fetched from ZKBio", dtos.size());
         return dtos;
     }
 
@@ -81,7 +82,7 @@ public class ZkBioAdapter {
      * Récupère les alertes et les enregistre dans la base (uniquement les actifs)
      */
     public List<ZkBioProblemDTO> fetchProblemsAndSave() {
-        log.info("🔐 Fetching problems from ZKBio and saving to DB");
+        log.info(" Fetching problems from ZKBio and saving to DB");
 
         JsonNode alerts = zkBioClient.getAlerts();
         List<ZkBioProblemDTO> dtos = new ArrayList<>();
@@ -113,7 +114,7 @@ public class ZkBioAdapter {
 
         if(!entities.isEmpty()) {
             problemRepository.saveAll(entities);
-            log.info("🔐 {} problems saved to ZKBio database", entities.size());
+            log.info(" {} problems saved to ZKBio database", entities.size());
         }
 
         return dtos;

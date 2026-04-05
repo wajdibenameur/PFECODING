@@ -27,10 +27,10 @@ public class ZabbixAdapter {
 
     // ================== HOSTS ==================
     public List<ServiceStatusDTO> fetchAll() {
-        log.info("📡 Fetching hosts from Zabbix");
+        log.info(" Fetching hosts from Zabbix");
 
         Map<String, MonitoredHost> hostMap = syncService.loadHostMap();
-        log.info("Hosts Map loaded: {}", hostMap); // 🔥 AJOUT
+        log.info("Hosts Map loaded: {}", hostMap); //  AJOUT
 
         JsonNode hosts = zabbixClient.getHosts();
         List<ServiceStatusDTO> dtos = new ArrayList<>();
@@ -53,7 +53,7 @@ public class ZabbixAdapter {
             dtos.add(dto);
         }
 
-        log.info("📡 {} hosts fetched from Zabbix", dtos.size());
+        log.info(" {} hosts fetched from Zabbix", dtos.size());
         return dtos;
     }
 
@@ -68,10 +68,10 @@ public class ZabbixAdapter {
 
     // ================== PROBLEMS ==================
     public List<ZabbixProblemDTO> fetchProblems() {
-        log.info("📡 Fetching problems from Zabbix");
+        log.info(" Fetching problems from Zabbix");
 
         Map<String, MonitoredHost> hostMap = syncService.loadHostMap();
-        log.info("Hosts Map loaded: {}", hostMap); // 🔥 AJOUT
+        log.info("Hosts Map loaded: {}", hostMap); //  AJOUT
 
         JsonNode problemsJson = zabbixClient.getAllActiveProblems();
         List<ZabbixProblemDTO> dtos = new ArrayList<>();
@@ -82,12 +82,12 @@ public class ZabbixAdapter {
         }
 
         for (JsonNode node : problemsJson) {
-            log.debug("Processing problem node: {}", node.toPrettyString()); // 🔥 AJOUT
+            log.debug("Processing problem node: {}", node.toPrettyString()); //  AJOUT
             try {
                 ZabbixProblemDTO dto = mapToDTO(node, hostMap);
                 if (dto != null) {
                     dtos.add(dto);
-                    log.debug("Mapped DTO: {}", dto); // 🔥 AJOUT
+                    log.debug("Mapped DTO: {}", dto); //  AJOUT
                 } else {
                     log.warn("Skipped problem node (no host found): {}", node.toPrettyString());
                 }
@@ -96,7 +96,7 @@ public class ZabbixAdapter {
             }
         }
 
-        log.info("📡 {} problems fetched from Zabbix", dtos.size());
+        log.info(" {} problems fetched from Zabbix", dtos.size());
         return dtos;
     }
 
@@ -136,7 +136,7 @@ public class ZabbixAdapter {
         log.info("===== ZABBIX METRICS COLLECTION START =====");
 
         Map<String, MonitoredHost> hostMap = syncService.loadHostMap();
-        log.info("Hosts Map loaded: {}", hostMap); // 🔥 AJOUT
+        log.info("Hosts Map loaded: {}", hostMap); //  AJOUT
 
         List<ZabbixMetric> metrics = new ArrayList<>();
         JsonNode hosts = zabbixClient.getHosts();
