@@ -49,3 +49,10 @@ nbbuild/
 # DOCS
 # =====================
 *.docx
+
+
+
+frontend/node_modules
+frontend/.env
+frontend/dist
+frontend/build
