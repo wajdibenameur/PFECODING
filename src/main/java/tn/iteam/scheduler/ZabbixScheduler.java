@@ -39,7 +39,7 @@ public class ZabbixScheduler {
     public void fetchAndPublishMetrics() {
         log.info("Scheduled: Fetching Zabbix metrics for WebSocket broadcast");
         try {
-            List<ZabbixMetric> metrics = metricsService.getAllMetrics();
+            List<ZabbixMetric> metrics = metricsService.fetchAndSaveMetrics();
             publisher.publishMetrics(metrics);
             log.info("Published {} Zabbix metrics to WebSocket", metrics.size());
         } catch (Exception e) {
