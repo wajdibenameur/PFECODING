@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { APP_CONFIG, AppConfig } from '../../../core/config/app-config.token';
 import { ApiResponse } from '../../../core/models/api-response.model';
 import { CollectionTarget } from '../../../core/models/collection-target.model';
+import { SourceAvailability } from '../../../core/models/source-availability.model';
 import { ZabbixMetric } from '../../../core/models/zabbix-metric.model';
 import { ZabbixProblem } from '../../../core/models/zabbix-problem.model';
 
@@ -26,6 +27,10 @@ export class MonitoringApiService {
 
   getMetrics(): Observable<ZabbixMetric[]> {
     return this.http.get<ZabbixMetric[]>(`${this.zabbixBaseUrl}/metrics`);
+  }
+
+  getSourceHealth(): Observable<SourceAvailability[]> {
+    return this.http.get<SourceAvailability[]>(`${this.monitoringBaseUrl}/sources/health`);
   }
 
   triggerCollection(target: CollectionTarget): Observable<ApiResponse<void>> {
