@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { StompClientService } from '../../../core/realtime/stomp-client.service';
+import { SourceAvailability } from '../../../core/models/source-availability.model';
 import { ZabbixMetric } from '../../../core/models/zabbix-metric.model';
 import { ZabbixProblem } from '../../../core/models/zabbix-problem.model';
 
@@ -14,5 +15,9 @@ export class MonitoringRealtimeService {
 
   metrics$(): Observable<ZabbixMetric[]> {
     return this.stomp.subscribe<ZabbixMetric[]>('/topic/zabbix/metrics');
+  }
+
+  sourceAvailability$(): Observable<SourceAvailability> {
+    return this.stomp.subscribe<SourceAvailability>('/topic/monitoring/sources');
   }
 }
