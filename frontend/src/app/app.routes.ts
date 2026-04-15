@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { ShellComponent } from './layout/shell/shell.component';
 import { MonitoringDashboardPageComponent } from './features/monitoring/ui/monitoring-dashboard-page.component';
+import { MonitoringZabbixPageComponent } from './features/monitoring/ui/monitoring-zabbix-page.component';
 import { PlaceholderPageComponent } from './shared/pages/placeholder-page.component';
 
 export const routes: Routes = [
@@ -10,7 +11,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', component: MonitoringDashboardPageComponent },
-      { path: 'monitoring/zabbix', component: PlaceholderPageComponent, data: { title: 'Zabbix' } },
+      { path: 'monitoring/zabbix', component: MonitoringZabbixPageComponent, data: { title: 'Zabbix' } },
       { path: 'monitoring/observium', component: PlaceholderPageComponent, data: { title: 'Observium' } },
       { path: 'monitoring/camera', component: PlaceholderPageComponent, data: { title: 'Camera' } },
       { path: 'monitoring/zkbio', component: PlaceholderPageComponent, data: { title: 'ZKBio' } },
