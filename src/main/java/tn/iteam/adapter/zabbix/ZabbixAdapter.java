@@ -88,7 +88,7 @@ public class ZabbixAdapter {
     public List<ZabbixProblemDTO> fetchProblems(JsonNode hosts) {
         Map<String, JsonNode> hostMapById = buildHostMap(hosts);
 
-        JsonNode problemsJson = zabbixClient.getAllActiveProblems();
+        JsonNode problemsJson = zabbixClient.getRecentProblems();
 
         List<ZabbixProblemDTO> dtos = new ArrayList<>();
 
@@ -118,10 +118,14 @@ public class ZabbixAdapter {
                 }
             }
 
-            long startedAt = node.path("clock").asLong();
-            long resolvedAt = node.path("r_clock").asLong();
+            long startedAt = node.path("clock").asLong(0L);
+            long resolvedAt = node.path("r_clock").asLong(0L);
 
             boolean isResolved = resolvedAt > 0;
+
+            if (startedAt <= 0) {
+                log.warn("Problem event {} missing clock from Zabbix payload", node.path("eventid").asText());
+            }
 
             dtos.add(
                     ZabbixProblemDTO.builder()

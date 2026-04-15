@@ -15,6 +15,7 @@ import tn.iteam.repository.ZabbixProblemRepository;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +31,7 @@ public class ZabbixProblemService {
     private final ZabbixProblemMapper mapper;
     private final ZabbixProblemRepository repository;
     private final SourceAvailabilityService availabilityService;
+    private final ZabbixDataQualityService dataQualityService;
 
     public List<ZabbixProblemDTO> getPersistedFilteredActiveProblems() {
         return repository.findByActiveTrueAndSeverityIn(EXPOSED_SEVERITIES).stream()
@@ -59,18 +61,20 @@ public class ZabbixProblemService {
             Set<String> liveProblemIds = new HashSet<>();
 
             for (ZabbixProblemDTO dto : dtos) {
-                if (dto.getProblemId() == null || dto.getProblemId().isBlank()) {
-                    log.warn("Skipping problem with empty problemId: {}", dto);
+                ZabbixProblemDTO sanitized = sanitize(dto);
+                if (sanitized == null) {
                     continue;
                 }
 
-                liveProblemIds.add(dto.getProblemId());
+                liveProblemIds.add(sanitized.getProblemId());
 
-                ZabbixProblem entity = mapper.toEntity(dto);
-                List<ZabbixProblem> existingList = repository.findAllByProblemId(entity.getProblemId());
+                ZabbixProblem entity = mapper.toEntity(sanitized);
+                List<ZabbixProblem> existingList = repository.findAllByProblemId(entity.getProblemId()).stream()
+                        .sorted(Comparator.comparing(ZabbixProblem::getId))
+                        .toList();
 
                 if (!existingList.isEmpty()) {
-                    ZabbixProblem existing = existingList.get(0);
+                    ZabbixProblem existing = existingList.get(existingList.size() - 1);
 
                     existing.setHostId(entity.getHostId());
                     existing.setHost(entity.getHost());
@@ -85,11 +89,10 @@ public class ZabbixProblemService {
                     existing.setResolvedAt(entity.getResolvedAt());
                     existing.setStatus(entity.getStatus());
 
-                    entitiesToSave.add(existing);
-
                     if (existingList.size() > 1) {
                         log.warn("Duplicate problemId={} found in DB: {} rows", entity.getProblemId(), existingList.size());
                     }
+                    entitiesToSave.add(existing);
                 } else {
                     entitiesToSave.add(entity);
                 }
@@ -109,9 +112,10 @@ public class ZabbixProblemService {
                 entitiesToSave.add(persistedActive);
             }
 
-            repository.saveAll(entitiesToSave);
+            List<ZabbixProblem> saved = repository.saveAll(entitiesToSave);
             availabilityService.markAvailable("ZABBIX");
-            log.info("Saved {} Zabbix problems, active in live feed={}", entitiesToSave.size(), liveProblemIds.size());
+            dataQualityService.logProblemQualitySummary(saved);
+            log.info("Saved {} Zabbix problems, active in live feed={}", saved.size(), liveProblemIds.size());
 
             return dtos;
         } catch (IntegrationException e) {
@@ -123,5 +127,77 @@ public class ZabbixProblemService {
             log.error("Unexpected error fetching Zabbix problems", e);
             return List.of();
         }
+    }
+
+    private ZabbixProblemDTO sanitize(ZabbixProblemDTO dto) {
+        if (dto == null) {
+            return null;
+        }
+
+        if (dto.getProblemId() == null || dto.getProblemId().isBlank()) {
+            log.warn("Skipping problem with empty problemId: {}", dto);
+            return null;
+        }
+
+        if (dto.getHostId() == null || dto.getHostId().isBlank()) {
+            log.warn("Skipping problem {} because hostId is missing", dto.getProblemId());
+            return null;
+        }
+
+        long fallbackNow = Instant.now().getEpochSecond();
+        Long startedAt = dto.getStartedAt();
+        if (startedAt == null || startedAt <= 0) {
+            log.warn("Problem {} missing startedAt from Zabbix, applying fallback current time", dto.getProblemId());
+            startedAt = fallbackNow;
+        }
+
+        boolean active = dto.getActive() == null || dto.getActive();
+        String status = dto.getStatus();
+        if (status == null || status.isBlank()) {
+            status = active ? "ACTIVE" : "RESOLVED";
+        }
+
+        Long resolvedAt = dto.getResolvedAt();
+        if ("RESOLVED".equalsIgnoreCase(status) && (resolvedAt == null || resolvedAt <= 0)) {
+            resolvedAt = fallbackNow;
+            log.warn("Problem {} marked RESOLVED without resolvedAt, applying fallback current time", dto.getProblemId());
+        }
+        if ("ACTIVE".equalsIgnoreCase(status)) {
+            resolvedAt = null;
+        }
+
+        String severity = dto.getSeverity();
+        if (severity == null || severity.isBlank()) {
+            severity = "0";
+            log.warn("Problem {} missing severity, applying fallback severity=0", dto.getProblemId());
+        }
+
+        Long eventId = dto.getEventId();
+        if (eventId == null || eventId <= 0) {
+            try {
+                eventId = Long.parseLong(dto.getProblemId());
+            } catch (NumberFormatException ex) {
+                eventId = fallbackNow;
+            }
+            log.warn("Problem {} missing eventId, applying fallback value={}", dto.getProblemId(), eventId);
+        }
+
+        return ZabbixProblemDTO.builder()
+                .problemId(dto.getProblemId())
+                .host(dto.getHost() == null || dto.getHost().isBlank() ? "UNKNOWN" : dto.getHost())
+                .port(dto.getPort())
+                .hostId(dto.getHostId())
+                .description(dto.getDescription() == null || dto.getDescription().isBlank() ? "NO_DESCRIPTION" : dto.getDescription())
+                .severity(severity)
+                .active(active)
+                .source(dto.getSource() == null || dto.getSource().isBlank() ? "Zabbix" : dto.getSource())
+                .eventId(eventId)
+                .ip(dto.getIp())
+                .startedAt(startedAt)
+                .startedAtFormatted(dto.getStartedAtFormatted())
+                .resolvedAt(resolvedAt)
+                .resolvedAtFormatted(dto.getResolvedAtFormatted())
+                .status(status.toUpperCase())
+                .build();
     }
 }

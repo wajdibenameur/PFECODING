@@ -26,6 +26,7 @@ public class ZabbixMetricsService {
     private final ZabbixMetricMapper mapper;
     private final ZabbixMetricRepository repository;
     private final SourceAvailabilityService availabilityService;
+    private final ZabbixDataQualityService dataQualityService;
 
     public List<ZabbixMetric> getPersistedMetricsSnapshot() {
         return repository.findAll();
@@ -66,14 +67,19 @@ public class ZabbixMetricsService {
 
             for (ZabbixMetricDTO dto : dtos) {
                 if (dto.getHostId() == null || dto.getHostId().isBlank()
-                        || dto.getItemId() == null || dto.getItemId().isBlank()) {
+                        || dto.getItemId() == null || dto.getItemId().isBlank()
+                        || dto.getTimestamp() == null) {
                     log.warn("Skipping metric with empty hostId/itemId: {}", dto);
                     continue;
                 }
 
                 ZabbixMetric entity = mapper.toEntity(dto);
 
-                ZabbixMetric finalEntity = repository.findByHostIdAndItemId(dto.getHostId(), dto.getItemId())
+                ZabbixMetric finalEntity = repository.findByHostIdAndItemIdAndTimestamp(
+                                dto.getHostId(),
+                                dto.getItemId(),
+                                dto.getTimestamp()
+                        )
                         .map(existing -> {
                             existing.setHostName(entity.getHostName());
                             existing.setMetricKey(entity.getMetricKey());
@@ -92,6 +98,7 @@ public class ZabbixMetricsService {
             repository.flush();
 
             availabilityService.markAvailable("ZABBIX");
+            dataQualityService.logMetricQualitySummary(saved);
             log.info("Saved/Updated {} Zabbix metrics", saved.size());
             log.info("DB count after save: {}", repository.count());
 

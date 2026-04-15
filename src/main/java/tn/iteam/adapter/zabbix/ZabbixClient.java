@@ -150,41 +150,41 @@ public class ZabbixClient {
         return executeRequest(payload, "host by id");
     }
 
-    public JsonNode getAllActiveProblems() {
-        log.info("[ZABBIX] getAllActiveProblems() called");
+    public JsonNode getRecentProblems() {
+        log.info("[ZABBIX] getRecentProblems() called");
 
         Map<String, Object> payload = createBasePayload("problem.get");
         Map<String, Object> params = new HashMap<>();
         params.put("output", "extend");
+        params.put("selectHosts", List.of("hostid", "host"));
         params.put("selectTags", "extend");
         params.put("sortfield", "eventid");
         params.put("sortorder", "DESC");
-        params.put("limit", 50);
+        params.put("limit", 200);
         params.put("recent", true);
-        params.put("acknowledged", false);
         params.put("severities", List.of(3, 4, 5));
         payload.put("params", params);
 
-        return executeRequest(payload, "problems");
+        return executeRequest(payload, "recent problems");
     }
 
-    public JsonNode getAllActiveProblemsByHost(String hostId) {
-        log.info("[ZABBIX] getAllActiveProblemsByHost() called with hostId={}", hostId);
+    public JsonNode getRecentProblemsByHost(String hostId) {
+        log.info("[ZABBIX] getRecentProblemsByHost() called with hostId={}", hostId);
 
         Map<String, Object> payload = createBasePayload("problem.get");
         Map<String, Object> params = new HashMap<>();
         params.put("output", "extend");
         params.put("hostids", List.of(hostId));
+        params.put("selectHosts", List.of("hostid", "host"));
         params.put("selectTags", "extend");
         params.put("sortfield", "eventid");
         params.put("sortorder", "DESC");
-        params.put("limit", 50);
+        params.put("limit", 200);
         params.put("recent", true);
-        params.put("acknowledged", false);
         params.put("severities", List.of(3, 4, 5));
         payload.put("params", params);
 
-        return executeRequest(payload, "problems by host");
+        return executeRequest(payload, "recent problems by host");
     }
 
     public JsonNode getTriggerById(String triggerId) {
