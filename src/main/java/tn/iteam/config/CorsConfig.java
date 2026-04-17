@@ -2,6 +2,7 @@ package tn.iteam.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -15,12 +16,12 @@ public class CorsConfig implements WebMvcConfigurer {
     }
 
     @Override
-    public void addCorsMappings(CorsRegistry registry) {
+    public void addCorsMappings(@NonNull CorsRegistry registry) {
         configure(registry, "/api/**");
         configure(registry, "/dashboard/**");
     }
 
-    private void configure(CorsRegistry registry, String pathPattern) {
+    private void configure(CorsRegistry registry, @NonNull String pathPattern) {
         registry.addMapping(pathPattern)
                 .allowedOriginPatterns(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
