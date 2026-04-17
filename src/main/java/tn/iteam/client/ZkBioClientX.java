@@ -1,8 +1,10 @@
 package tn.iteam.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -18,18 +20,27 @@ import tn.iteam.exception.IntegrationResponseException;
 import tn.iteam.exception.IntegrationTimeoutException;
 import tn.iteam.exception.IntegrationUnavailableException;
 import tn.iteam.service.SourceAvailabilityService;
+import tn.iteam.util.IntegrationClientSupport;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ZkBioClientX {
 
     private static final String SOURCE = "ZKBIO";
+    private static final String SOURCE_LABEL = "ZKBio";
     private static final String DEVICES_ENDPOINT = "/api/devices";
     private static final String ALERTS_ENDPOINT = "/api/alerts";
+    private static final String EMPTY_RESPONSE_TEMPLATE = "Empty response from ZKBio %s API";
+    private static final String MISSING_FIELD_TEMPLATE = "ZKBio response missing '%s' field for %s";
+    private static final String HTTP_ERROR_LOG_TEMPLATE = "ZKBio HTTP error on {}: {}";
+    private static final String TIMEOUT_LOG_TEMPLATE = "ZKBio timeout/unreachable on {}: {}";
+    private static final String TRANSPORT_ERROR_LOG_TEMPLATE = "ZKBio transport error on {}: {}";
+    private static final String UNEXPECTED_ERROR_LOG_TEMPLATE = "Unexpected ZKBio {} error: {}";
 
     private final RestTemplate restTemplate;
     private final SourceAvailabilityService availabilityService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Value("${zkbio.url}")
     private String baseUrl;
@@ -38,14 +49,15 @@ public class ZkBioClientX {
     private String apiToken;
 
     public JsonNode getDevices() {
-        return callApi(DEVICES_ENDPOINT, "devices");
+        return callApi(DEVICES_ENDPOINT, IntegrationClientSupport.DEVICES_FIELD);
     }
 
     public JsonNode getAlerts() {
-        return callApi(ALERTS_ENDPOINT, "alerts");
+        return callApi(ALERTS_ENDPOINT, IntegrationClientSupport.ALERTS_FIELD);
     }
 
     private JsonNode callApi(String endpoint, String responseField) {
+        String apiTarget = IntegrationClientSupport.apiTarget(responseField);
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     baseUrl + endpoint,
@@ -55,27 +67,44 @@ public class ZkBioClientX {
             );
 
             if (response.getBody() == null) {
-                throw new IntegrationResponseException(SOURCE, "Empty response from ZKBio " + responseField + " API");
+                throw new IntegrationResponseException(SOURCE, EMPTY_RESPONSE_TEMPLATE.formatted(responseField));
             }
 
-            JsonNode payload = objectMapper.readTree(response.getBody()).get(responseField);
-            availabilityService.markAvailable(SOURCE);
+            JsonNode payload = extractPayload(response.getBody(), responseField, endpoint);
+            markAvailable();
             return payload;
         } catch (HttpStatusCodeException ex) {
-            availabilityService.markUnavailable(SOURCE, "HTTP " + ex.getStatusCode().value() + " on " + responseField + " API");
-            throw new IntegrationUnavailableException(SOURCE, "ZKBio returned HTTP " + ex.getStatusCode().value() + " on " + responseField + " API", ex);
+            int statusCode = ex.getStatusCode().value();
+            log.warn(HTTP_ERROR_LOG_TEMPLATE, apiTarget, statusCode);
+            markUnavailable(IntegrationClientSupport.httpOn(apiTarget, statusCode));
+            throw new IntegrationUnavailableException(
+                    SOURCE,
+                    IntegrationClientSupport.returnedHttp(SOURCE_LABEL, statusCode, apiTarget),
+                    ex
+            );
         } catch (ResourceAccessException ex) {
-            availabilityService.markUnavailable(SOURCE, "Timeout on " + responseField + " API");
-            throw new IntegrationTimeoutException(SOURCE, "ZKBio timeout on " + responseField + " API", ex);
+            log.warn(TIMEOUT_LOG_TEMPLATE, apiTarget, ex.getMessage());
+            markUnavailable(IntegrationClientSupport.timeoutOn(apiTarget));
+            throw new IntegrationTimeoutException(SOURCE, IntegrationClientSupport.timeout(SOURCE_LABEL, apiTarget), ex);
         } catch (IntegrationResponseException ex) {
-            availabilityService.markUnavailable(SOURCE, ex.getMessage());
+            markUnavailable(ex.getMessage());
             throw ex;
         } catch (RestClientException ex) {
-            availabilityService.markUnavailable(SOURCE, "Transport error on " + responseField + " API");
-            throw new IntegrationUnavailableException(SOURCE, "ZKBio unreachable on " + responseField + " API", ex);
+            log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, apiTarget, ex.getMessage());
+            markUnavailable(IntegrationClientSupport.transportErrorOn(apiTarget));
+            throw new IntegrationUnavailableException(
+                    SOURCE,
+                    IntegrationClientSupport.unreachable(SOURCE_LABEL, apiTarget),
+                    ex
+            );
         } catch (Exception ex) {
-            availabilityService.markUnavailable(SOURCE, "Unexpected " + responseField + " API error");
-            throw new IntegrationUnavailableException(SOURCE, "Unexpected ZKBio " + responseField + " API error", ex);
+            log.error(UNEXPECTED_ERROR_LOG_TEMPLATE, apiTarget, ex.getMessage(), ex);
+            markUnavailable(IntegrationClientSupport.unexpectedErrorOn(apiTarget));
+            throw new IntegrationUnavailableException(
+                    SOURCE,
+                    IntegrationClientSupport.unexpectedError(SOURCE_LABEL, apiTarget),
+                    ex
+            );
         }
     }
 
@@ -86,5 +115,22 @@ public class ZkBioClientX {
             headers.setBearerAuth(apiToken);
         }
         return headers;
+    }
+
+    private JsonNode extractPayload(String responseBody, String responseField, String endpoint)
+            throws JsonProcessingException {
+        JsonNode payload = objectMapper.readTree(responseBody).get(responseField);
+        if (payload == null || payload.isNull()) {
+            throw new IntegrationResponseException(SOURCE, MISSING_FIELD_TEMPLATE.formatted(responseField, endpoint));
+        }
+        return payload;
+    }
+
+    private void markAvailable() {
+        availabilityService.markAvailable(SOURCE);
+    }
+
+    private void markUnavailable(String reason) {
+        availabilityService.markUnavailable(SOURCE, reason);
     }
 }
