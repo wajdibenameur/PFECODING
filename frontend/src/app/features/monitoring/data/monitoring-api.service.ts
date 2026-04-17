@@ -7,6 +7,8 @@ import { CollectionTarget } from '../../../core/models/collection-target.model';
 import { DashboardAnomaly } from '../../../core/models/dashboard-anomaly.model';
 import { DashboardOverview } from '../../../core/models/dashboard-overview.model';
 import { DashboardPrediction } from '../../../core/models/dashboard-prediction.model';
+import { MonitoringHost } from '../../../core/models/monitoring-host.model';
+import { MonitoringProblem } from '../../../core/models/monitoring-problem.model';
 import { SourceAvailability } from '../../../core/models/source-availability.model';
 import { ZabbixMetric } from '../../../core/models/zabbix-metric.model';
 import { ZabbixProblem } from '../../../core/models/zabbix-problem.model';
@@ -36,6 +38,14 @@ export class MonitoringApiService {
 
   getSourceHealth(): Observable<SourceAvailability[]> {
     return this.http.get<SourceAvailability[]>(`${this.monitoringBaseUrl}/sources/health`);
+  }
+
+  getMonitoringHosts(): Observable<MonitoringHost[]> {
+    return this.http.get<MonitoringHost[]>(`${this.monitoringBaseUrl}/hosts`);
+  }
+
+  getMonitoringProblems(): Observable<MonitoringProblem[]> {
+    return this.http.get<MonitoringProblem[]>(`${this.monitoringBaseUrl}/problems`);
   }
 
   getDashboardOverview(): Observable<DashboardOverview> {
