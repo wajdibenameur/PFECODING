@@ -104,9 +104,9 @@ public class MonitoringCacheService {
             return FRESHNESS_PERSISTED;
         }
 
-        return sourceAvailabilityService.isAvailable(sourceType.name())
-                ? FRESHNESS_LIVE
-                : FRESHNESS_REDIS_FALLBACK;
+        return sourceAvailabilityService.isDegraded(sourceType.name())
+                ? FRESHNESS_REDIS_FALLBACK
+                : FRESHNESS_LIVE;
     }
 
     private List<MonitoringProvider> providersFor(String source) {

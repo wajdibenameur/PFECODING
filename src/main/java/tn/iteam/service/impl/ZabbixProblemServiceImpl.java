@@ -54,7 +54,16 @@ public class ZabbixProblemServiceImpl implements ZabbixProblemService {
     @Override
     public List<ZabbixProblemDTO> synchronizeAndGetPersistedFilteredActiveProblems() {
         synchronizeActiveProblemsFromZabbix();
-        return getPersistedFilteredActiveProblems();
+        List<ZabbixProblemDTO> persisted = getPersistedFilteredActiveProblems();
+
+        if (!persisted.isEmpty() && !availabilityService.isAvailable(MonitoringConstants.SOURCE_ZABBIX)) {
+            availabilityService.markDegraded(
+                    MonitoringConstants.SOURCE_ZABBIX,
+                    "Live Zabbix problems unavailable, using last persisted snapshot"
+            );
+        }
+
+        return persisted;
     }
 
     @Override

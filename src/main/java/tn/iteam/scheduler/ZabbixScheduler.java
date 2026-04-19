@@ -84,6 +84,13 @@ public class ZabbixScheduler {
                     return;
                 }
 
+                availabilityService.markDegraded(
+                        SOURCE_ZABBIX,
+                        lastError != null && !lastError.isBlank()
+                                ? lastError
+                                : "Live Zabbix problems unavailable, publishing last persisted snapshot"
+                );
+
                 if (availabilityService.isRetryCooldownActive(SOURCE_ZABBIX, retryBackoffMs)) {
                     log.debug("Publishing last persisted Zabbix problems snapshot ({} problems)", problems.size());
                 } else {
@@ -93,7 +100,7 @@ public class ZabbixScheduler {
 
             publisher.publishProblems(problems);
             List<UnifiedMonitoringProblemDTO> monitoringProblems =
-                    monitoringAggregationService.getProblems(MonitoringSourceType.ZABBIX);
+                    monitoringAggregationService.getProblems(MonitoringSourceType.ZABBIX).getData();
             monitoringPublisher.publishProblems(monitoringProblems);
             log.info("Published {} Zabbix problems to WebSocket", problems.size());
         } catch (Exception e) {
@@ -133,6 +140,13 @@ public class ZabbixScheduler {
                     return;
                 }
 
+                availabilityService.markDegraded(
+                        SOURCE_ZABBIX,
+                        lastError != null && !lastError.isBlank()
+                                ? lastError
+                                : "Live Zabbix metrics unavailable, publishing last persisted snapshot"
+                );
+
                 if (availabilityService.isRetryCooldownActive(SOURCE_ZABBIX, retryBackoffMs)) {
                     log.debug("Publishing last persisted Zabbix metrics snapshot ({} metrics)", metrics.size());
                 } else {
@@ -142,7 +156,7 @@ public class ZabbixScheduler {
 
             publisher.publishMetrics(metrics);
             List<UnifiedMonitoringMetricDTO> monitoringMetrics =
-                    monitoringAggregationService.getMetrics(MonitoringSourceType.ZABBIX);
+                    monitoringAggregationService.getMetrics(MonitoringSourceType.ZABBIX).getData();
             monitoringPublisher.publishMetrics(monitoringMetrics);
             log.info("Published {} Zabbix metrics to WebSocket", metrics.size());
         } catch (Exception e) {

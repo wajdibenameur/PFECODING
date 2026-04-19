@@ -9,9 +9,15 @@ public interface SourceAvailabilityService {
 
     void markAvailable(String source);
 
+    void markDegraded(String source, String errorMessage);
+
     void markUnavailable(String source, String errorMessage);
 
     boolean isAvailable(String source);
+
+    boolean isDegraded(String source);
+
+    String getStatus(String source);
 
     String getLastError(String source);
 
