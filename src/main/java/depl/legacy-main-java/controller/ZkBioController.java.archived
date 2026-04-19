@@ -1,0 +1,97 @@
+package tn.iteam.controller;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+import tn.iteam.dto.ServiceStatusDTO;
+import tn.iteam.dto.ZkBioAttendanceDTO;
+import tn.iteam.dto.ZkBioProblemDTO;
+import tn.iteam.service.ZkBioService;
+
+import java.util.List;
+
+/**
+ * Controller pour l'intégration ZKBio Time
+ * Endpoints REST pour récupérer les appareils, journaux de présence et alertes
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/zkbio")
+@RequiredArgsConstructor
+public class ZkBioController {
+
+    private final ZkBioService zkBioService;
+
+    /**
+     * Récupère le statut du serveur ZKBio
+     * GET /api/zkbio/status
+     */
+    @GetMapping("/status")
+    public ServiceStatusDTO getServerStatus() {
+        log.info("GET /api/zkbio/status");
+        return zkBioService.getServerStatus();
+    }
+
+    /**
+     * Récupère la liste des appareils ZKBio
+     * GET /api/zkbio/devices
+     */
+    @GetMapping("/devices")
+    public List<ServiceStatusDTO> getDevices() {
+        log.info("GET /api/zkbio/devices");
+        return zkBioService.fetchDevices();
+    }
+
+    /**
+     * Récupère les problèmes/alertes actifs
+     * GET /api/zkbio/problems
+     */
+    @GetMapping("/problems")
+    public List<ZkBioProblemDTO> getProblems() {
+        log.info("GET /api/zkbio/problems");
+        return zkBioService.fetchProblems();
+    }
+
+    /**
+     * Récupère les journaux de présence (pointages)
+     * GET /api/zkbio/attendance
+     */
+    @GetMapping("/attendance")
+    public List<ZkBioAttendanceDTO> getAttendanceLogs() {
+        log.info("GET /api/zkbio/attendance");
+        return zkBioService.fetchAttendanceLogs();
+    }
+
+    /**
+     * Récupère les journaux de présence pour une période spécifique
+     * GET /api/zkbio/attendance?startTime=1234567890&endTime=1234567899
+     */
+    @GetMapping("/attendance/range")
+    public List<ZkBioAttendanceDTO> getAttendanceLogsByRange(
+            @RequestParam long startTime,
+            @RequestParam long endTime) {
+        log.info("GET /api/zkbio/attendance/range?startTime={}&endTime={}", startTime, endTime);
+        return zkBioService.fetchAttendanceLogs(startTime, endTime);
+    }
+
+    /**
+     * Déclenche une collecte manuelle des données ZKBio
+     * POST /api/zkbio/collect
+     */
+    @PostMapping("/collect")
+    public String triggerCollection() {
+        log.info("POST /api/zkbio/collect");
+        zkBioService.collectData();
+        return "ZKBIO COLLECTED";
+    }
+
+    /**
+     * Récupère les utilisateurs enregistrés
+     * GET /api/zkbio/users
+     */
+    @GetMapping("/users")
+    public List<ZkBioAttendanceDTO> getUsers() {
+        log.info("GET /api/zkbio/users");
+        return zkBioService.fetchUsers();
+    }
+}

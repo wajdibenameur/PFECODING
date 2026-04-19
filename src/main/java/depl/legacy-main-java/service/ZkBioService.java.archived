@@ -1,0 +1,184 @@
+package tn.iteam.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import tn.iteam.adapter.zkbio.ZkBioAdapter;
+import tn.iteam.client.ZkBioClient;
+import tn.iteam.dto.ServiceStatusDTO;
+import tn.iteam.dto.ZkBioAttendanceDTO;
+import tn.iteam.dto.ZkBioProblemDTO;
+import tn.iteam.mapper.ZkBioAttendanceMapper;
+import tn.iteam.mapper.ZkBioMapper;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Service pour l'intégration ZKBio Time
+ * Gère la récupération des appareils, journaux de présence et alertes
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ZkBioService {
+
+    private final ZkBioAdapter zkBioAdapter;
+    private final ZkBioClient zkBioClient;
+    private final ZkBioMapper zkBioMapper;
+    private final ZkBioAttendanceMapper attendanceMapper;
+
+    /**
+     * Récupère le statut du serveur ZKBio
+     */
+    public ServiceStatusDTO getServerStatus() {
+        log.info("Fetching ZKBio server status");
+        try {
+            JsonNode status = zkBioClient.getStatus();
+            ServiceStatusDTO dto = new ServiceStatusDTO();
+            dto.setSource("ZKBIO");
+            dto.setName("ZKBio Server");
+            dto.setIp("192.168.11.8");
+            dto.setPort(8098);
+            dto.setProtocol("HTTPS");
+            dto.setCategory("ACCESS_CONTROL");
+            
+            if (status != null && status.has("code") && status.get("code").asInt() == 1) {
+                dto.setStatus("UP");
+            } else {
+                dto.setStatus("DOWN");
+            }
+            
+            return dto;
+        } catch (Exception e) {
+            log.error("Error fetching ZKBio status: {}", e.getMessage());
+            ServiceStatusDTO dto = new ServiceStatusDTO();
+            dto.setSource("ZKBIO");
+            dto.setName("ZKBio Server");
+            dto.setStatus("DOWN");
+            return dto;
+        }
+    }
+
+    /**
+     * Récupère la liste des appareils
+     */
+    public List<ServiceStatusDTO> fetchDevices() {
+        log.info("Fetching ZKBio devices");
+        return zkBioAdapter.fetchAll();
+    }
+
+    /**
+     * Récupère les problèmes/alertes actifs
+     */
+    public List<ZkBioProblemDTO> fetchProblems() {
+        log.info("Fetching ZKBio problems/alerts");
+        return zkBioAdapter.fetchProblems();
+    }
+
+    /**
+     * Récupère les journaux de présence (dernières 24h)
+     */
+    public List<ZkBioAttendanceDTO> fetchAttendanceLogs() {
+        log.info("Fetching ZKBio attendance logs");
+        List<ZkBioAttendanceDTO> dtos = new ArrayList<>();
+        
+        try {
+            JsonNode logs = zkBioClient.getAttendanceLogs();
+            
+            if (logs == null || !logs.isArray()) {
+                log.warn("No attendance logs received from ZKBio");
+                return dtos;
+            }
+            
+            for (JsonNode logNode : logs) {
+                dtos.add(attendanceMapper.mapToDTO(logNode));
+            }
+            
+            log.info("Fetched {} attendance logs from ZKBio", dtos.size());
+            
+        } catch (Exception e) {
+            log.error("Error fetching ZKBio attendance logs: {}", e.getMessage());
+        }
+        
+        return dtos;
+    }
+
+    /**
+     * Récupère les journaux de présence pour une période spécifique
+     */
+    public List<ZkBioAttendanceDTO> fetchAttendanceLogs(long startTime, long endTime) {
+        log.info("Fetching ZKBio attendance logs from {} to {}", startTime, endTime);
+        List<ZkBioAttendanceDTO> dtos = new ArrayList<>();
+        
+        try {
+            JsonNode logs = zkBioClient.getAttendanceLogs(startTime, endTime);
+            
+            if (logs == null || !logs.isArray()) {
+                log.warn("No attendance logs received from ZKBio");
+                return dtos;
+            }
+            
+            for (JsonNode logNode : logs) {
+                dtos.add(attendanceMapper.mapToDTO(logNode));
+            }
+            
+            log.info("Fetched {} attendance logs from ZKBio", dtos.size());
+            
+        } catch (Exception e) {
+            log.error("Error fetching ZKBio attendance logs: {}", e.getMessage());
+        }
+        
+        return dtos;
+    }
+
+    /**
+     * Récupère les utilisateurs enregistrés
+     */
+    public List<ZkBioAttendanceDTO> fetchUsers() {
+        log.info("Fetching ZKBio users");
+        List<ZkBioAttendanceDTO> dtos = new ArrayList<>();
+        
+        try {
+            JsonNode users = zkBioClient.getUsers();
+            
+            if (users == null || !users.isArray()) {
+                log.warn("No users received from ZKBio");
+                return dtos;
+            }
+            
+            for (JsonNode userNode : users) {
+                ZkBioAttendanceDTO dto = ZkBioAttendanceDTO.builder()
+                        .userId(userNode.has("user_id") ? userNode.get("user_id").asText() : "")
+                        .userName(userNode.has("name") ? userNode.get("name").asText() : "")
+                        .source("ZKBIO")
+                        .build();
+                dtos.add(dto);
+            }
+            
+            log.info("Fetched {} users from ZKBio", dtos.size());
+            
+        } catch (Exception e) {
+            log.error("Error fetching ZKBio users: {}", e.getMessage());
+        }
+        
+        return dtos;
+    }
+
+    /**
+     * Déclenche une collecte manuelle des données
+     */
+    @Async
+    public void collectData() {
+        log.info("Triggering manual ZKBio data collection");
+        try {
+            List<ServiceStatusDTO> devices = zkBioAdapter.fetchAll();
+            List<ZkBioProblemDTO> problems = zkBioAdapter.fetchProblems();
+            log.info("ZKBio collection completed: {} devices, {} problems", devices.size(), problems.size());
+        } catch (Exception e) {
+            log.error("Error during ZKBio collection: {}", e.getMessage());
+        }
+    }
+}
