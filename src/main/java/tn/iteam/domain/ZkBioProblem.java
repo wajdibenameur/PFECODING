@@ -21,6 +21,7 @@ public class ZkBioProblem {
     private String device;      // nom du device ou utilisateur
     private String description;
     private Boolean active;
+    @Builder.Default
     private String source = "ZKBIO";
     private Long eventId;       // optionnel
 }
