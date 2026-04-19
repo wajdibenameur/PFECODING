@@ -1,12 +1,14 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { MonitoringProblem } from '../../../core/models/monitoring-problem.model';
+import { ObserviumMetric } from '../../../core/models/observium-metric.model';
 import { ServiceStatus } from '../../../core/models/service-status.model';
 import { StompClientService } from '../../../core/realtime/stomp-client.service';
 import { SourceAvailability } from '../../../core/models/source-availability.model';
 import { ZabbixMetric } from '../../../core/models/zabbix-metric.model';
 import { ZabbixProblem } from '../../../core/models/zabbix-problem.model';
 import { ZkBioAttendance } from '../../../core/models/zkbio-attendance.model';
+import { ZkBioMetric } from '../../../core/models/zkbio-metric.model';
 import { ZkBioProblem } from '../../../core/models/zkbio-problem.model';
 import { UnifiedMonitoringMetric } from '../../../core/models/unified-monitoring-metric.model';
 
@@ -30,6 +32,26 @@ export class MonitoringRealtimeService {
     return this.stomp.subscribe<UnifiedMonitoringMetric[]>('/topic/monitoring/metrics');
   }
 
+  observiumMetrics$(): Observable<ObserviumMetric[]> {
+    return this.monitoringMetrics$().pipe(
+      map((metrics) =>
+        metrics
+          .filter((metric) => metric.source === 'OBSERVIUM')
+          .map((metric) => this.toObserviumMetric(metric))
+      )
+    );
+  }
+
+  zkbioMetrics$(): Observable<ZkBioMetric[]> {
+    return this.monitoringMetrics$().pipe(
+      map((metrics) =>
+        metrics
+          .filter((metric) => metric.source === 'ZKBIO')
+          .map((metric) => this.toZkBioMetric(metric))
+      )
+    );
+  }
+
   sourceAvailability$(): Observable<SourceAvailability> {
     return this.stomp.subscribe<SourceAvailability>('/topic/monitoring/sources');
   }
@@ -48,5 +70,31 @@ export class MonitoringRealtimeService {
 
   zkbioStatus$(): Observable<ServiceStatus> {
     return this.stomp.subscribe<ServiceStatus>('/topic/zkbio/status');
+  }
+
+  private toObserviumMetric(metric: UnifiedMonitoringMetric): ObserviumMetric {
+    return {
+      hostId: metric.hostId,
+      hostName: metric.hostName,
+      itemId: metric.itemId,
+      metricKey: metric.metricKey,
+      value: metric.value,
+      timestamp: metric.timestamp,
+      ip: metric.ip,
+      port: metric.port
+    };
+  }
+
+  private toZkBioMetric(metric: UnifiedMonitoringMetric): ZkBioMetric {
+    return {
+      hostId: metric.hostId,
+      hostName: metric.hostName,
+      itemId: metric.itemId,
+      metricKey: metric.metricKey,
+      value: metric.value,
+      timestamp: metric.timestamp,
+      ip: metric.ip,
+      port: metric.port
+    };
   }
 }
