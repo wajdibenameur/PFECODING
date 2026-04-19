@@ -47,7 +47,7 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
             dto.setStatus(status != null && status.has("code") && status.get("code").asInt() == 1 ? "UP" : "DOWN");
             return dto;
         } catch (Exception e) {
-            log.error("Error fetching ZKBio status: {}", e.getMessage());
+            log.warn("ZKBio status degraded: {}", e.getMessage());
             ServiceStatusDTO dto = new ServiceStatusDTO();
             dto.setSource("ZKBIO");
             dto.setName("ZKBio Server");
@@ -104,7 +104,7 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
 
             log.info("Fetched {} users from ZKBio", dtos.size());
         } catch (Exception e) {
-            log.error("Error fetching ZKBio users: {}", e.getMessage());
+            log.warn("ZKBio users unavailable: {}", e.getMessage());
         }
 
         return dtos;
@@ -132,7 +132,7 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
 
             log.info("Fetched {} attendance logs from ZKBio", dtos.size());
         } catch (Exception e) {
-            log.error("Error mapping ZKBio attendance logs: {}", e.getMessage());
+            log.warn("ZKBio attendance logs unavailable: {}", e.getMessage());
         }
 
         return dtos;

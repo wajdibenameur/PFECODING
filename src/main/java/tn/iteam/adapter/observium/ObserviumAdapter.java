@@ -6,13 +6,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import tn.iteam.client.ObserviumClientX;
 import tn.iteam.domain.ApiResponse;
+import tn.iteam.domain.ObserviumMetric;
 import tn.iteam.domain.ObserviumProblem;
+import tn.iteam.dto.ObserviumMetricDTO;
 import tn.iteam.dto.ObserviumProblemDTO;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.exception.IntegrationDataUnavailableException;
+import tn.iteam.mapper.ObserviumMetricMapper;
+import tn.iteam.mapper.ObserviumMonitoringMapper;
 import tn.iteam.mapper.ObserviumMapper;
-import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
+import tn.iteam.repository.ObserviumMetricRepository;
 import tn.iteam.repository.ObserviumProblemRepository;
 import tn.iteam.websocket.MonitoringWebSocketPublisher;
 
@@ -20,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
 
 @Slf4j
 @Component
@@ -28,6 +33,9 @@ public class ObserviumAdapter {
 
     private final ObserviumClientX observiumClient;
     private final ObserviumMapper observiumMapper;
+    private final ObserviumMetricMapper observiumMetricMapper;
+    private final ObserviumMonitoringMapper observiumMonitoringMapper;
+    private final ObserviumMetricRepository metricRepository;
     private final ObserviumProblemRepository problemRepository;
     private final MonitoringWebSocketPublisher monitoringWebSocketPublisher;
 
@@ -83,7 +91,7 @@ public class ObserviumAdapter {
         for (JsonNode node : response.getData()) {
             ObserviumProblemDTO dto = observiumMapper.mapAlertToDTO(node);
             dtos.add(dto);
-            monitoringProblems.add(toUnifiedProblem(dto));
+            monitoringProblems.add(observiumMonitoringMapper.toProblem(dto));
         }
 
         List<ObserviumProblem> entities = buildEntitiesToSave(dtos);
@@ -97,6 +105,63 @@ public class ObserviumAdapter {
         monitoringWebSocketPublisher.publishProblems(monitoringProblems);
 
         return dtos;
+    }
+
+    public List<ObserviumMetricDTO> fetchMetrics() {
+        List<ServiceStatusDTO> statuses = fetchAll();
+        long now = Instant.now().getEpochSecond();
+        List<ObserviumMetricDTO> metrics = new ArrayList<>();
+
+        for (ServiceStatusDTO status : statuses) {
+            String hostName = status.getName() != null && !status.getName().isBlank() ? status.getName() : "UNKNOWN";
+            String hostId = status.getIp() != null && !status.getIp().isBlank() && !"IP_UNKNOWN".equalsIgnoreCase(status.getIp())
+                    ? status.getIp()
+                    : hostName;
+
+            metrics.add(ObserviumMetricDTO.builder()
+                    .hostId(hostId)
+                    .hostName(hostName)
+                    .itemId("device-status")
+                    .metricKey("observium.device.status")
+                    .value("UP".equalsIgnoreCase(status.getStatus()) ? 1.0 : 0.0)
+                    .timestamp(now)
+                    .ip(status.getIp())
+                    .port(status.getPort())
+                    .build());
+        }
+
+        return metrics;
+    }
+
+    public List<ObserviumMetric> fetchMetricsAndSave() {
+        List<ObserviumMetricDTO> dtos = fetchMetrics();
+        List<ObserviumMetric> entitiesToSave = new ArrayList<>();
+
+        for (ObserviumMetricDTO dto : dtos) {
+            if (dto.getHostId() == null || dto.getHostId().isBlank() || dto.getTimestamp() == null) {
+                continue;
+            }
+
+            ObserviumMetric entity = observiumMetricMapper.toEntity(dto);
+            ObserviumMetric finalEntity = metricRepository.findByHostIdAndItemIdAndTimestamp(
+                            dto.getHostId(),
+                            dto.getItemId(),
+                            dto.getTimestamp()
+                    )
+                    .map(existing -> {
+                        existing.setHostName(entity.getHostName());
+                        existing.setMetricKey(entity.getMetricKey());
+                        existing.setValue(entity.getValue());
+                        existing.setIp(entity.getIp());
+                        existing.setPort(entity.getPort());
+                        return existing;
+                    })
+                    .orElse(entity);
+
+            entitiesToSave.add(finalEntity);
+        }
+
+        return metricRepository.saveAll(entitiesToSave);
     }
 
     private List<ObserviumProblem> buildEntitiesToSave(List<ObserviumProblemDTO> dtos) {
@@ -128,6 +193,8 @@ public class ObserviumAdapter {
             entity.setActive(true);
             entity.setSource(dto.getSource());
             entity.setEventId(dto.getEventId());
+            entity.setStartedAt(dto.getStartedAt());
+            entity.setResolvedAt(dto.getResolvedAt());
             entities.add(entity);
         }
 
@@ -154,6 +221,8 @@ public class ObserviumAdapter {
                 existing.setActive(dto.isActive());
                 existing.setSource(dto.getSource());
                 existing.setEventId(dto.getEventId());
+                existing.setStartedAt(dto.getStartedAt());
+                existing.setResolvedAt(dto.getResolvedAt());
             } else {
                 existing.setActive(false);
             }
@@ -161,23 +230,5 @@ public class ObserviumAdapter {
         }
 
         return resolvedEntities;
-    }
-
-    private UnifiedMonitoringProblemDTO toUnifiedProblem(ObserviumProblemDTO dto) {
-        String hostName = dto.getHost() != null && !dto.getHost().isBlank() ? dto.getHost() : "UNKNOWN";
-        String hostId = dto.getHostId() != null ? dto.getHostId() : hostName;
-
-        return UnifiedMonitoringProblemDTO.builder()
-                .id(MonitoringSourceType.OBSERVIUM + ":" + dto.getProblemId())
-                .source(MonitoringSourceType.OBSERVIUM)
-                .problemId(dto.getProblemId())
-                .eventId(dto.getEventId())
-                .hostId(hostId)
-                .hostName(hostName)
-                .description(dto.getDescription())
-                .severity(dto.getSeverity())
-                .active(dto.isActive())
-                .status(dto.isActive() ? "ACTIVE" : "RESOLVED")
-                .build();
     }
 }

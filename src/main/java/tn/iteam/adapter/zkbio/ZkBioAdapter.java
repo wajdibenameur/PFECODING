@@ -6,15 +6,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tn.iteam.client.ZkBioClientX;
+import tn.iteam.domain.ZkBioMetric;
 import tn.iteam.domain.ZkBioProblem;
 import tn.iteam.dto.ServiceStatusDTO;
+import tn.iteam.dto.ZkBioMetricDTO;
 import tn.iteam.dto.ZkBioProblemDTO;
-import tn.iteam.exception.IntegrationDataUnavailableException;
 import tn.iteam.exception.IntegrationException;
+import tn.iteam.mapper.ZkBioMetricMapper;
 import tn.iteam.mapper.ZkBioMapper;
+import tn.iteam.repository.ZkBioMetricRepository;
 import tn.iteam.repository.ZkBioProblemRepository;
 import tn.iteam.util.MonitoringConstants;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,6 +41,8 @@ public class ZkBioAdapter {
 
     private final ZkBioClientX zkBioClient;
     private final ZkBioMapper zkBioMapper;
+    private final ZkBioMetricMapper zkBioMetricMapper;
+    private final ZkBioMetricRepository metricRepository;
     private final ZkBioProblemRepository problemRepository;
 
     public List<ServiceStatusDTO> fetchAll() {
@@ -77,7 +83,7 @@ public class ZkBioAdapter {
 
         if (alerts == null || !alerts.isArray()) {
             log.warn(NO_ALERTS_MESSAGE);
-            throw IntegrationDataUnavailableException.forZkBio("Alerts unavailable: null or non-array response");
+            return dtos;
         }
 
         for (JsonNode alertNode : alerts) {
@@ -110,6 +116,9 @@ public class ZkBioAdapter {
                         .device(dto.getHost())
                         .description(dto.getDescription())
                         .active(dto.isActive())
+                        .status(dto.getStatus())
+                        .startedAt(dto.getStartedAt())
+                        .resolvedAt(dto.getResolvedAt())
                         .source(dto.getSource())
                         .eventId(dto.getEventId())
                         .build();
@@ -132,5 +141,67 @@ public class ZkBioAdapter {
             log.warn(unavailableLogTemplate, e.getMessage());
             return null;
         }
+    }
+
+    public List<ZkBioMetricDTO> fetchMetrics() {
+        long now = Instant.now().getEpochSecond();
+        List<ZkBioMetricDTO> metrics = new ArrayList<>();
+        JsonNode devices = zkBioClient.getDevices();
+
+        int deviceCount = devices != null && devices.isArray() ? devices.size() : 0;
+        metrics.add(ZkBioMetricDTO.builder()
+                .hostId("ZKBIO_SERVER")
+                .hostName(SERVER_NAME)
+                .itemId("devices-count")
+                .metricKey("zkbio.devices.count")
+                .value((double) deviceCount)
+                .timestamp(now)
+                .ip(SERVER_IP)
+                .port(SERVER_PORT)
+                .build());
+
+        metrics.add(ZkBioMetricDTO.builder()
+                .hostId("ZKBIO_SERVER")
+                .hostName(SERVER_NAME)
+                .itemId("server-status")
+                .metricKey("zkbio.server.status")
+                .value(deviceCount > 0 ? 1.0 : 0.0)
+                .timestamp(now)
+                .ip(SERVER_IP)
+                .port(SERVER_PORT)
+                .build());
+
+        return metrics;
+    }
+
+    public List<ZkBioMetric> fetchMetricsAndSave() {
+        List<ZkBioMetricDTO> dtos = fetchMetrics();
+        List<ZkBioMetric> entitiesToSave = new ArrayList<>();
+
+        for (ZkBioMetricDTO dto : dtos) {
+            if (dto.getHostId() == null || dto.getHostId().isBlank() || dto.getTimestamp() == null) {
+                continue;
+            }
+
+            ZkBioMetric entity = zkBioMetricMapper.toEntity(dto);
+            ZkBioMetric finalEntity = metricRepository.findByHostIdAndItemIdAndTimestamp(
+                            dto.getHostId(),
+                            dto.getItemId(),
+                            dto.getTimestamp()
+                    )
+                    .map(existing -> {
+                        existing.setHostName(entity.getHostName());
+                        existing.setMetricKey(entity.getMetricKey());
+                        existing.setValue(entity.getValue());
+                        existing.setIp(entity.getIp());
+                        existing.setPort(entity.getPort());
+                        return existing;
+                    })
+                    .orElse(entity);
+
+            entitiesToSave.add(finalEntity);
+        }
+
+        return metricRepository.saveAll(entitiesToSave);
     }
 }
