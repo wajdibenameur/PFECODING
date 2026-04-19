@@ -50,7 +50,8 @@ nbbuild/
 # =====================
 *.docx
 
-
+src/main/java/depl/
+docs/
 
 frontend/node_modules
 frontend/.env
