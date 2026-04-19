@@ -255,11 +255,13 @@ export class MonitoringZkBioPageComponent implements OnInit {
     }
 
     const fallbackStatus =
-      availability?.available === true
+      availability?.status === 'AVAILABLE' || availability?.available === true
         ? 'UP'
-        : availability?.available === false
-          ? 'DOWN'
-          : 'UNKNOWN';
+        : availability?.status === 'DEGRADED'
+          ? 'DEGRADED'
+          : availability?.status === 'UNAVAILABLE' || availability?.available === false
+            ? 'DOWN'
+            : 'UNKNOWN';
 
     return {
       source: status?.source ?? 'ZKBIO',
@@ -268,7 +270,8 @@ export class MonitoringZkBioPageComponent implements OnInit {
       port: status?.port ?? null,
       protocol: status?.protocol ?? null,
       status: status?.status ?? fallbackStatus,
-      category: status?.category ?? 'ACCESS'
+      category: status?.category ?? 'ACCESS',
+      lastCheck: status?.lastCheck ?? null
     };
   }
 
