@@ -5,19 +5,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 import tn.iteam.cache.IntegrationCacheService;
 import tn.iteam.exception.IntegrationResponseException;
 import tn.iteam.exception.IntegrationTimeoutException;
@@ -25,9 +21,10 @@ import tn.iteam.exception.IntegrationUnavailableException;
 import tn.iteam.service.SourceAvailabilityService;
 import tn.iteam.util.IntegrationClientSupport;
 
+import java.time.Duration;
+
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ZkBioClientX {
 
     private static final String SOURCE = "ZKBIO";
@@ -44,7 +41,7 @@ public class ZkBioClientX {
     private static final String DEVICES_SNAPSHOT_KEY = "devices";
     private static final String ALERTS_SNAPSHOT_KEY = "alerts";
 
-    private final RestTemplate restTemplate;
+    private final WebClient webClient;
     private final IntegrationCacheService integrationCacheService;
     private final SourceAvailabilityService availabilityService;
     private final ObjectMapper objectMapper;
@@ -55,64 +52,80 @@ public class ZkBioClientX {
     @Value("${zkbio.token:}")
     private String apiToken;
 
+    public ZkBioClientX(
+            @Qualifier("zkbioUnsafeTlsWebClientForInternalUseOnly") WebClient webClient,
+            IntegrationCacheService integrationCacheService,
+            SourceAvailabilityService availabilityService,
+            ObjectMapper objectMapper
+    ) {
+        this.webClient = webClient;
+        this.integrationCacheService = integrationCacheService;
+        this.availabilityService = availabilityService;
+        this.objectMapper = objectMapper;
+    }
+
     @Retry(name = RESILIENCE_NAME, fallbackMethod = "getDevicesFallback")
     @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getDevicesFallback")
     public JsonNode getDevices() {
-        return callApiLive(DEVICES_ENDPOINT, IntegrationClientSupport.DEVICES_FIELD, DEVICES_SNAPSHOT_KEY);
+        return callApiLive(DEVICES_ENDPOINT, IntegrationClientSupport.DEVICES_FIELD, DEVICES_SNAPSHOT_KEY).block();
     }
 
     @Retry(name = RESILIENCE_NAME, fallbackMethod = "getAlertsFallback")
     @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getAlertsFallback")
     public JsonNode getAlerts() {
-        return callApiLive(ALERTS_ENDPOINT, IntegrationClientSupport.ALERTS_FIELD, ALERTS_SNAPSHOT_KEY);
+        return callApiLive(ALERTS_ENDPOINT, IntegrationClientSupport.ALERTS_FIELD, ALERTS_SNAPSHOT_KEY).block();
     }
 
-    private JsonNode callApiLive(String endpoint, String responseField, String snapshotKey) {
+    private Mono<JsonNode> callApiLive(String endpoint, String responseField, String snapshotKey) {
         String apiTarget = IntegrationClientSupport.apiTarget(responseField);
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(
-                    baseUrl + endpoint,
-                    HttpMethod.GET,
-                    new HttpEntity<>(createHeaders()),
-                    String.class
-            );
 
-            if (response.getBody() == null) {
-                throw new IntegrationResponseException(SOURCE, EMPTY_RESPONSE_TEMPLATE.formatted(responseField));
-            }
-
-            JsonNode payload = extractPayload(response.getBody(), responseField, endpoint);
-            integrationCacheService.saveSnapshot(SOURCE, snapshotKey, payload);
-            markAvailable();
-            return payload;
-        } catch (HttpStatusCodeException ex) {
-            int statusCode = ex.getStatusCode().value();
-            log.warn(HTTP_ERROR_LOG_TEMPLATE, apiTarget, statusCode);
-            throw new IntegrationUnavailableException(
-                    SOURCE,
-                    IntegrationClientSupport.returnedHttp(SOURCE_LABEL, statusCode, apiTarget),
-                    ex
-            );
-        } catch (ResourceAccessException ex) {
-            log.warn(TIMEOUT_LOG_TEMPLATE, apiTarget, ex.getMessage());
-            throw new IntegrationTimeoutException(SOURCE, IntegrationClientSupport.timeout(SOURCE_LABEL, apiTarget), ex);
-        } catch (IntegrationResponseException ex) {
-            throw ex;
-        } catch (RestClientException ex) {
-            log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, apiTarget, ex.getMessage());
-            throw new IntegrationUnavailableException(
-                    SOURCE,
-                    IntegrationClientSupport.unreachable(SOURCE_LABEL, apiTarget),
-                    ex
-            );
-        } catch (Exception ex) {
-            log.error(UNEXPECTED_ERROR_LOG_TEMPLATE, apiTarget, ex.getMessage(), ex);
-            throw new IntegrationUnavailableException(
-                    SOURCE,
-                    IntegrationClientSupport.unexpectedError(SOURCE_LABEL, apiTarget),
-                    ex
-            );
-        }
+        return webClient.get()
+                .uri(baseUrl + endpoint)
+                .accept(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + apiToken)
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(10))
+                .doOnSuccess(responseBody -> {
+                    if (responseBody == null || responseBody.isBlank()) {
+                        throw new IntegrationResponseException(SOURCE, EMPTY_RESPONSE_TEMPLATE.formatted(responseField));
+                    }
+                })
+                .map(responseBody -> {
+                    try {
+                        JsonNode payload = objectMapper.readTree(responseBody).get(responseField);
+                        if (payload == null || payload.isNull()) {
+                            throw new IntegrationResponseException(SOURCE, MISSING_FIELD_TEMPLATE.formatted(responseField, endpoint));
+                        }
+                        integrationCacheService.saveSnapshot(SOURCE, snapshotKey, payload);
+                        markAvailable();
+                        return payload;
+                    } catch (JsonProcessingException e) {
+                        throw new IntegrationResponseException(SOURCE, "Failed to parse ZKBio response: " + e.getMessage(), e);
+                    }
+                })
+                .doOnError(WebClientResponseException.class, ex -> {
+                    log.warn(HTTP_ERROR_LOG_TEMPLATE, apiTarget, ex.getStatusCode().value());
+                })
+                .onErrorResume(WebClientResponseException.class, ex -> {
+                    throw new IntegrationUnavailableException(
+                            SOURCE,
+                            IntegrationClientSupport.returnedHttp(SOURCE_LABEL, ex.getStatusCode().value(), apiTarget),
+                            ex
+                    );
+                })
+                .onErrorResume(WebClientException.class, ex -> {
+                    log.warn(TIMEOUT_LOG_TEMPLATE, apiTarget, ex.getMessage());
+                    throw new IntegrationTimeoutException(SOURCE, IntegrationClientSupport.timeout(SOURCE_LABEL, apiTarget), ex);
+                })
+                .onErrorResume(Exception.class, ex -> {
+                    log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, apiTarget, ex.getMessage());
+                    throw new IntegrationUnavailableException(
+                            SOURCE,
+                            IntegrationClientSupport.unreachable(SOURCE_LABEL, apiTarget),
+                            ex
+                    );
+                });
     }
 
     private JsonNode getDevicesFallback(Throwable throwable) {
@@ -123,32 +136,16 @@ public class ZkBioClientX {
         return cachedFallback(ALERTS_SNAPSHOT_KEY, throwable);
     }
 
-    private HttpHeaders createHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        if (!apiToken.isEmpty()) {
-            headers.setBearerAuth(apiToken);
-        }
-        return headers;
-    }
-
-    private JsonNode extractPayload(String responseBody, String responseField, String endpoint)
-            throws JsonProcessingException {
-        JsonNode payload = objectMapper.readTree(responseBody).get(responseField);
-        if (payload == null || payload.isNull()) {
-            throw new IntegrationResponseException(SOURCE, MISSING_FIELD_TEMPLATE.formatted(responseField, endpoint));
-        }
-        return payload;
-    }
-
     private void markAvailable() {
         availabilityService.markAvailable(SOURCE);
     }
 
     private JsonNode cachedFallback(String snapshotKey, Throwable throwable) {
-        String reason = throwable != null && throwable.getMessage() != null && !throwable.getMessage().isBlank()
-                ? throwable.getMessage()
-                : "ZKBio live API failure";
+        String reason = IntegrationClientSupport.stableFallbackReason(
+                SOURCE_LABEL,
+                "ZKBio live API failure",
+                throwable
+        );
 
         return integrationCacheService.getSnapshot(SOURCE, snapshotKey, JsonNode.class)
                 .map(snapshot -> {
