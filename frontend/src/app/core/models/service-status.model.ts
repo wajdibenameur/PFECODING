@@ -6,4 +6,5 @@ export interface ServiceStatus {
   protocol: string | null;
   status: string | null;
   category: string | null;
+  lastCheck: string | null;
 }

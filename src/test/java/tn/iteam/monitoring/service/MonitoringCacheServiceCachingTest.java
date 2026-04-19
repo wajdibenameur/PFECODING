@@ -2,6 +2,7 @@ package tn.iteam.monitoring.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
@@ -11,6 +12,7 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
 import tn.iteam.monitoring.provider.MonitoringProvider;
+import tn.iteam.service.SourceAvailabilityService;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -75,8 +77,16 @@ class MonitoringCacheServiceCachingTest {
         }
 
         @Bean
-        MonitoringCacheService monitoringCacheService(List<MonitoringProvider> providers) {
-            return new MonitoringCacheService(providers);
+        SourceAvailabilityService sourceAvailabilityService() {
+            return Mockito.mock(SourceAvailabilityService.class);
+        }
+
+        @Bean
+        MonitoringCacheService monitoringCacheService(
+                List<MonitoringProvider> providers,
+                SourceAvailabilityService sourceAvailabilityService
+        ) {
+            return new MonitoringCacheService(providers, sourceAvailabilityService);
         }
     }
 

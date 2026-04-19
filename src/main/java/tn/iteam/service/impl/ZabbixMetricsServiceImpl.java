@@ -49,6 +49,10 @@ public class ZabbixMetricsServiceImpl implements ZabbixMetricsService {
         List<ZabbixMetric> persisted = getPersistedMetricsSnapshot();
 
         if (synced.isEmpty() && !persisted.isEmpty() && !availabilityService.isAvailable(MonitoringConstants.SOURCE_ZABBIX)) {
+            availabilityService.markDegraded(
+                    MonitoringConstants.SOURCE_ZABBIX,
+                    "Live Zabbix metrics unavailable, using last persisted snapshot"
+            );
             log.warn("Zabbix unavailable, using last persisted metrics snapshot ({} metrics)", persisted.size());
         }
 

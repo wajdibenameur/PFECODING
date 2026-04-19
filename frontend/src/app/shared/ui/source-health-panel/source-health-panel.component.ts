@@ -8,7 +8,7 @@ export interface SourceHealthVm {
   total: number | null;
   down: number | null;
   coverage: SourceCoverage;
-  availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN';
+  availability: 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'UNKNOWN';
   note: string;
 }
 

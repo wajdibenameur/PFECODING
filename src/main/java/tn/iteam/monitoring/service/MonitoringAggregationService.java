@@ -1,81 +1,63 @@
 package tn.iteam.monitoring.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
-import tn.iteam.monitoring.provider.MonitoringProvider;
+import tn.iteam.monitoring.dto.UnifiedMonitoringResponse;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
-import java.util.function.Supplier;
+import java.util.Map;
 
 @Service
 public class MonitoringAggregationService {
 
-    private static final Logger log = LoggerFactory.getLogger(MonitoringAggregationService.class);
+    private static final Map<String, String> METRICS_COVERAGE = Map.of(
+            MonitoringSourceType.ZABBIX.name(), "supported",
+            MonitoringSourceType.OBSERVIUM.name(), "not_supported",
+            MonitoringSourceType.ZKBIO.name(), "not_supported"
+    );
 
-    private final List<MonitoringProvider> providers;
+    private final MonitoringCacheService monitoringCacheService;
 
-    public MonitoringAggregationService(List<MonitoringProvider> providers) {
-        this.providers = List.copyOf(providers);
+    public MonitoringAggregationService(MonitoringCacheService monitoringCacheService) {
+        this.monitoringCacheService = monitoringCacheService;
     }
 
-    public List<UnifiedMonitoringProblemDTO> getProblems(String source) {
-        return providersFor(source).stream()
-                .flatMap(provider -> safeFetch(provider, "problems", provider::getProblems).stream())
-                .sorted(Comparator.comparing(UnifiedMonitoringProblemDTO::getStartedAt, Comparator.nullsLast(Long::compareTo)).reversed())
-                .toList();
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringProblemDTO>> getProblems(String source) {
+        MonitoringCacheService.FetchResult<List<UnifiedMonitoringProblemDTO>> result = monitoringCacheService.getProblems(source);
+        return new UnifiedMonitoringResponse<>(result.getData(), result.isDegraded(), result.getFreshness(), Map.of());
     }
 
-    public List<UnifiedMonitoringMetricDTO> getMetrics(String source) {
-        return providersFor(source).stream()
-                .flatMap(provider -> safeFetch(provider, "metrics", provider::getMetrics).stream())
-                .sorted(Comparator.comparing(UnifiedMonitoringMetricDTO::getTimestamp, Comparator.nullsLast(Long::compareTo)).reversed())
-                .toList();
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringMetricDTO>> getMetrics(String source) {
+        MonitoringCacheService.FetchResult<List<UnifiedMonitoringMetricDTO>> result = monitoringCacheService.getMetrics(source);
+        return new UnifiedMonitoringResponse<>(result.getData(), result.isDegraded(), result.getFreshness(), metricsCoverage(source));
     }
 
-    public List<UnifiedMonitoringHostDTO> getHosts(String source) {
-        return providersFor(source).stream()
-                .flatMap(provider -> safeFetch(provider, "hosts", provider::getHosts).stream())
-                .sorted(Comparator.comparing(UnifiedMonitoringHostDTO::getSource).thenComparing(UnifiedMonitoringHostDTO::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
-                .toList();
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringHostDTO>> getHosts(String source) {
+        MonitoringCacheService.FetchResult<List<UnifiedMonitoringHostDTO>> result = monitoringCacheService.getHosts(source);
+        return new UnifiedMonitoringResponse<>(result.getData(), result.isDegraded(), result.getFreshness(), Map.of());
     }
 
-    public List<UnifiedMonitoringProblemDTO> getProblems(MonitoringSourceType source) {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringProblemDTO>> getProblems(MonitoringSourceType source) {
         return getProblems(source != null ? source.name() : null);
     }
 
-    public List<UnifiedMonitoringMetricDTO> getMetrics(MonitoringSourceType source) {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringMetricDTO>> getMetrics(MonitoringSourceType source) {
         return getMetrics(source != null ? source.name() : null);
     }
 
-    public List<UnifiedMonitoringHostDTO> getHosts(MonitoringSourceType source) {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringHostDTO>> getHosts(MonitoringSourceType source) {
         return getHosts(source != null ? source.name() : null);
     }
 
-    private <T> List<T> safeFetch(MonitoringProvider provider, String operation, Supplier<List<T>> fetcher) {
-        try {
-            return fetcher.get();
-        } catch (Exception ex) {
-            log.warn("Monitoring provider {} failed while fetching {}: {}",
-                    provider.getSourceType(), operation, ex.getMessage(), ex);
-            return List.of();
-        }
-    }
-
-    private List<MonitoringProvider> providersFor(String source) {
+    private Map<String, String> metricsCoverage(String source) {
         if (source == null || source.isBlank() || "ALL".equalsIgnoreCase(source)) {
-            return providers;
+            return METRICS_COVERAGE;
         }
 
-        MonitoringSourceType requested = MonitoringSourceType.valueOf(source.trim().toUpperCase(Locale.ROOT));
-        return providers.stream()
-                .filter(provider -> provider.getSourceType() == requested)
-                .toList();
+        MonitoringSourceType requested = MonitoringSourceType.valueOf(source.trim().toUpperCase());
+        return Map.of(requested.name(), METRICS_COVERAGE.getOrDefault(requested.name(), "not_supported"));
     }
 }

@@ -39,7 +39,7 @@ export interface SourceHealthVm {
   total: number | null;
   down: number | null;
   coverage: 'REAL' | 'MISSING_BACKEND_READ_ENDPOINT';
-  availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN';
+  availability: 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'UNKNOWN';
   note: string;
 }
 

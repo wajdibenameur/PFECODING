@@ -20,6 +20,7 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
     private static final String UNKNOWN = "UNKNOWN";
     private static final String UNKNOWN_INTEGRATION_ERROR = "Unknown integration error";
     private static final String AVAILABLE = "AVAILABLE";
+    private static final String DEGRADED = "DEGRADED";
     private static final String UNAVAILABLE = "UNAVAILABLE";
 
     private static final List<String> KNOWN_SOURCES = List.of(ZABBIX, OBSERVIUM, ZKBIO, CAMERA);
@@ -30,20 +31,23 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
     public SourceAvailabilityServiceImpl(MonitoringWebSocketPublisher publisher) {
         this.publisher = publisher;
         for (String source : KNOWN_SOURCES) {
-            states.put(source, new AvailabilityState(true, null, null));
+            states.put(source, new AvailabilityState(AVAILABLE, null, null));
         }
     }
 
     @Override
     public void markAvailable(String source) {
         String normalized = normalize(source);
-        AvailabilityState previous = getState(normalized);
-        AvailabilityState next = new AvailabilityState(true, null, null);
-        states.put(normalized, next);
+        updateState(normalized, new AvailabilityState(AVAILABLE, null, null), Instant.now());
+    }
 
-        if (!previous.available()) {
-            publisher.publishSourceAvailability(toDto(normalized, next, Instant.now()));
-        }
+    @Override
+    public void markDegraded(String source, String errorMessage) {
+        String normalized = normalize(source);
+        String safeMessage = errorMessage == null || errorMessage.isBlank()
+                ? UNKNOWN_INTEGRATION_ERROR
+                : errorMessage;
+        updateState(normalized, new AvailabilityState(DEGRADED, safeMessage, Instant.now()), Instant.now());
     }
 
     @Override
@@ -53,18 +57,22 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
                 ? UNKNOWN_INTEGRATION_ERROR
                 : errorMessage;
         Instant failureAt = Instant.now();
-        AvailabilityState previous = getState(normalized);
-        AvailabilityState next = new AvailabilityState(false, safeMessage, failureAt);
-        states.put(normalized, next);
-
-        if (previous.available()) {
-            publisher.publishSourceAvailability(toDto(normalized, next, failureAt));
-        }
+        updateState(normalized, new AvailabilityState(UNAVAILABLE, safeMessage, failureAt), failureAt);
     }
 
     @Override
     public boolean isAvailable(String source) {
-        return getState(source).available();
+        return AVAILABLE.equals(getState(source).status());
+    }
+
+    @Override
+    public boolean isDegraded(String source) {
+        return DEGRADED.equals(getState(source).status());
+    }
+
+    @Override
+    public String getStatus(String source) {
+        return getState(source).status();
     }
 
     @Override
@@ -109,7 +117,7 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
     }
 
     private AvailabilityState getState(String source) {
-        return states.getOrDefault(normalize(source), new AvailabilityState(true, null, null));
+        return states.getOrDefault(normalize(source), new AvailabilityState(AVAILABLE, null, null));
     }
 
     private String normalize(String source) {
@@ -119,15 +127,34 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
     private SourceAvailabilityDTO toDto(String source, AvailabilityState state, Instant timestamp) {
         return SourceAvailabilityDTO.builder()
                 .source(source)
-                .available(state.available())
-                .status(state.available() ? AVAILABLE : UNAVAILABLE)
-                .message(state.available() ? null : state.lastError())
+                .available(AVAILABLE.equals(state.status()))
+                .status(state.status())
+                .message(AVAILABLE.equals(state.status()) ? null : state.lastError())
                 .lastError(state.lastError())
                 .lastFailureAt(state.lastFailureAt())
                 .timestamp(timestamp)
                 .build();
     }
 
-    private record AvailabilityState(boolean available, String lastError, Instant lastFailureAt) {
+    private void updateState(String source, AvailabilityState next, Instant eventTimestamp) {
+        AvailabilityState previous = getState(source);
+        states.put(source, next);
+
+        if (hasChanged(previous, next)) {
+            publisher.publishSourceAvailability(toDto(source, next, eventTimestamp));
+        }
+    }
+
+    private boolean hasChanged(AvailabilityState previous, AvailabilityState next) {
+        if (!previous.status().equals(next.status())) {
+            return true;
+        }
+        if (previous.lastError() == null) {
+            return next.lastError() != null;
+        }
+        return !previous.lastError().equals(next.lastError());
+    }
+
+    private record AvailabilityState(String status, String lastError, Instant lastFailureAt) {
     }
 }

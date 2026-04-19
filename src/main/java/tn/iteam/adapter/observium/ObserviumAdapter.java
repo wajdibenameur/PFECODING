@@ -9,6 +9,7 @@ import tn.iteam.domain.ApiResponse;
 import tn.iteam.domain.ObserviumProblem;
 import tn.iteam.dto.ObserviumProblemDTO;
 import tn.iteam.dto.ServiceStatusDTO;
+import tn.iteam.exception.IntegrationDataUnavailableException;
 import tn.iteam.mapper.ObserviumMapper;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
@@ -42,8 +43,9 @@ public class ObserviumAdapter {
         ApiResponse<JsonNode> response = observiumClient.getDevices();
         List<ServiceStatusDTO> dtos = new ArrayList<>();
         if (!isValid(response)) {
-            log.warn("Devices API failed: {}", response.getMessage());
-            return dtos;
+            String errorMsg = response != null ? response.getMessage() : "null response";
+            log.warn("Devices API failed: {}", errorMsg);
+            throw IntegrationDataUnavailableException.forObservium("Devices unavailable: " + errorMsg);
         }
         for (JsonNode node : response.getData()) {
             dtos.add(observiumMapper.mapDeviceToDTO(node));
@@ -56,8 +58,9 @@ public class ObserviumAdapter {
         ApiResponse<JsonNode> response = observiumClient.getAlerts();
         List<ObserviumProblemDTO> dtos = new ArrayList<>();
         if (!isValid(response)) {
-            log.warn("Alerts API failed: {}", response.getMessage());
-            return dtos;
+            String errorMsg = response != null ? response.getMessage() : "null response";
+            log.warn("Alerts API failed: {}", errorMsg);
+            throw IntegrationDataUnavailableException.forObservium("Alerts unavailable: " + errorMsg);
         }
         for (JsonNode node : response.getData()) {
             dtos.add(observiumMapper.mapAlertToDTO(node));
