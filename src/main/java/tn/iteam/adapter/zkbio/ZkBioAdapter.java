@@ -9,6 +9,7 @@ import tn.iteam.client.ZkBioClientX;
 import tn.iteam.domain.ZkBioProblem;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.dto.ZkBioProblemDTO;
+import tn.iteam.exception.IntegrationDataUnavailableException;
 import tn.iteam.exception.IntegrationException;
 import tn.iteam.mapper.ZkBioMapper;
 import tn.iteam.repository.ZkBioProblemRepository;
@@ -76,7 +77,7 @@ public class ZkBioAdapter {
 
         if (alerts == null || !alerts.isArray()) {
             log.warn(NO_ALERTS_MESSAGE);
-            return dtos;
+            throw IntegrationDataUnavailableException.forZkBio("Alerts unavailable: null or non-array response");
         }
 
         for (JsonNode alertNode : alerts) {
