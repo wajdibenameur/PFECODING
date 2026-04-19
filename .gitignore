@@ -61,3 +61,6 @@ frontend/build
 PFERTC/artifacts/logs/
 PFERTC/artifacts/metrics/
 PFERTC/artifacts/models/
+
+docs/
+src/main/java/depl/
