@@ -8,7 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
 import tn.iteam.cache.IntegrationCacheService;
 import tn.iteam.domain.ApiResponse;
 import tn.iteam.exception.IntegrationUnavailableException;
@@ -37,7 +37,7 @@ class ObserviumClientXFallbackTest {
         integrationCacheService = mock(IntegrationCacheService.class);
         availabilityService = mock(SourceAvailabilityService.class);
         observiumClientX = new ObserviumClientX(
-                mock(RestTemplate.class),
+                mock(WebClient.class),
                 OBJECT_MAPPER,
                 integrationCacheService,
                 availabilityService,
@@ -112,7 +112,7 @@ class ObserviumClientXFallbackTest {
         assertThat(response.getData()).isEqualTo(snapshot);
         verify(availabilityService).markDegraded(
                 eq("OBSERVIUM"),
-                eq("CircuitBreaker 'observiumApi' is CLOSED and does not permit further calls")
+                eq("Observium circuit breaker open")
         );
     }
 }
