@@ -1,34 +1,67 @@
-HELP.md
+# =====================
+# CONFIG (DO NOT COMMIT SECRETS)
+# =====================
+src/main/resources/application.properties
+src/main/resources/application.yml
+
+# =====================
+# LOGS
+# =====================
+/logs/
+*.log
+*.gz
+
+# =====================
+# BUILD OUTPUT
+# =====================
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
-
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-.application.properties
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
 build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+dist/
+nbdist/
+nbbuild/
 
-### VS Code ###
+# =====================
+# MAVEN
+# =====================
+.mvn/wrapper/maven-wrapper.jar
+
+# =====================
+# IDE - IntelliJ / Eclipse / STS
+# =====================
+.idea/
+*.iml
+*.iws
+*.ipr
 .vscode/
-comparaison_pfecoding.docx
+
+.classpath
+.project
+.settings/
+.springBeans
+.apt_generated
+
+# =====================
+# NETBEANS
+# =====================
+/nbproject/
+
+# =====================
+# DOCS
+# =====================
+*.docx
+
+
+
+frontend/node_modules
+frontend/.env
+frontend/dist
+frontend/build
+
+
+PFERTC/artifacts/logs/
+PFERTC/artifacts/metrics/
+PFERTC/artifacts/models/
+
+docs/
+src/main/java/depl/mintty.exe.stackdump
+main/resources/
