@@ -27,8 +27,10 @@ public class ZabbixProblem {
     private Boolean active;
     private String ip;
     private Integer port;
+
     @Column(nullable = false)
     private String source = "Zabbix";
+
     @Column(nullable = false)
     private Long eventId;
 

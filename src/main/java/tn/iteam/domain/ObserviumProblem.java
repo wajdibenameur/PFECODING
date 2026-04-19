@@ -25,4 +25,8 @@ public class ObserviumProblem {
     private Boolean active;
     private String source = "Observium";
     private Long eventId;
+    @Column(name = "started_at")
+    private Long startedAt;
+    @Column(name = "resolved_at")
+    private Long resolvedAt;
 }
