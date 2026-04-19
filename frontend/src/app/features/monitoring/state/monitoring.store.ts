@@ -265,11 +265,15 @@ export class MonitoringStore {
     });
   }
 
-  private mapAvailability(entry: SourceAvailability | undefined): 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' {
+  private mapAvailability(entry: SourceAvailability | undefined): 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'UNKNOWN' {
     if (!entry) {
       return 'UNKNOWN';
     }
-    if (entry.status === 'AVAILABLE' || entry.status === 'UNAVAILABLE') {
+    if (
+      entry.status === 'AVAILABLE' ||
+      entry.status === 'DEGRADED' ||
+      entry.status === 'UNAVAILABLE'
+    ) {
       return entry.status;
     }
     return entry.available ? 'AVAILABLE' : 'UNAVAILABLE';
