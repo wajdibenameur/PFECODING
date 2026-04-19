@@ -19,7 +19,7 @@ public class ZabbixMetricsController {
 
     @GetMapping
     public List<ZabbixMetricDTO> getMetrics() {
-        return aggregationService.getMetrics(MonitoringSourceType.ZABBIX).stream()
+        return aggregationService.getMetrics(MonitoringSourceType.ZABBIX).getData().stream()
                 .map(metric -> ZabbixMetricDTO.builder()
                         .hostId(metric.getHostId())
                         .hostName(metric.getHostName())

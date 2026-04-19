@@ -19,7 +19,7 @@ public class ZabbixProblemController {
 
     @GetMapping("/active")
     public List<ZabbixProblemDTO> allActive() {
-        return aggregationService.getProblems(MonitoringSourceType.ZABBIX).stream()
+        return aggregationService.getProblems(MonitoringSourceType.ZABBIX).getData().stream()
                 .map(problem -> ZabbixProblemDTO.builder()
                         .problemId(problem.getProblemId())
                         .host(problem.getHostName())

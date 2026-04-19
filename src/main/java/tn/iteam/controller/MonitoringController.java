@@ -8,6 +8,7 @@ import tn.iteam.dto.SourceAvailabilityDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
+import tn.iteam.monitoring.dto.UnifiedMonitoringResponse;
 import tn.iteam.monitoring.service.MonitoringAggregationService;
 import tn.iteam.service.MonitoringService;
 import tn.iteam.service.SourceAvailabilityService;
@@ -24,17 +25,17 @@ public class MonitoringController {
     private final SourceAvailabilityService sourceAvailabilityService;
 
     @GetMapping("/problems")
-    public List<UnifiedMonitoringProblemDTO> getProblems() {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringProblemDTO>> getProblems() {
         return aggregationService.getProblems((String) null);
     }
 
     @GetMapping("/metrics")
-    public List<UnifiedMonitoringMetricDTO> getMetrics() {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringMetricDTO>> getMetrics() {
         return aggregationService.getMetrics((String) null);
     }
 
     @GetMapping("/hosts")
-    public List<UnifiedMonitoringHostDTO> getHosts() {
+    public UnifiedMonitoringResponse<List<UnifiedMonitoringHostDTO>> getHosts() {
         return aggregationService.getHosts((String) null);
     }
 
