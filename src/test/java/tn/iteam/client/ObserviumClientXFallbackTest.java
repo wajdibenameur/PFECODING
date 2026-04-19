@@ -8,7 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestTemplate;
 import tn.iteam.cache.IntegrationCacheService;
 import tn.iteam.domain.ApiResponse;
 import tn.iteam.exception.IntegrationUnavailableException;
@@ -17,6 +17,7 @@ import tn.iteam.service.SourceAvailabilityService;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -36,7 +37,7 @@ class ObserviumClientXFallbackTest {
         integrationCacheService = mock(IntegrationCacheService.class);
         availabilityService = mock(SourceAvailabilityService.class);
         observiumClientX = new ObserviumClientX(
-                mock(WebClient.class),
+                mock(RestTemplate.class),
                 OBJECT_MAPPER,
                 integrationCacheService,
                 availabilityService,
@@ -46,15 +47,15 @@ class ObserviumClientXFallbackTest {
     }
 
     @Test
-    void apiDownRedisUpReturnsSnapshotAndMarksObserviumUnavailable() {
+    void apiDownRedisUpReturnsSnapshotAndMarksObserviumDegraded() {
         JsonNode snapshot = OBJECT_MAPPER.createArrayNode().add(OBJECT_MAPPER.createObjectNode().put("device", "sw1"));
-        when(integrationCacheService.getSnapshot("OBSERVIUM", "observium:devices", JsonNode.class))
+        when(integrationCacheService.getSnapshot("OBSERVIUM", "devices", JsonNode.class))
                 .thenReturn(Optional.of(snapshot));
 
         @SuppressWarnings("unchecked")
         ApiResponse<JsonNode> response = (ApiResponse<JsonNode>) ReflectionTestUtils.invokeMethod(
                 observiumClientX,
-                "cachedFallback",
+                "cachedFallbackResponse",
                 "devices",
                 "Devices fetched successfully",
                 new IntegrationUnavailableException("OBSERVIUM", "Observium API down")
@@ -63,42 +64,37 @@ class ObserviumClientXFallbackTest {
         assertThat(response).isNotNull();
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isEqualTo(snapshot);
-        assertThat(response.getMessage()).contains("Redis fallback");
-        verify(availabilityService).markUnavailable(
+        assertThat(response.getMessage()).isEqualTo("Devices fetched successfully");
+        verify(availabilityService).markDegraded(
                 eq("OBSERVIUM"),
-                eq("Observium API unavailable, serving Redis snapshot for devices")
+                eq("Observium API down")
         );
     }
 
     @Test
-    void apiDownRedisDownReturnsFailureAndMarksObserviumUnavailable() {
-        when(integrationCacheService.getSnapshot("OBSERVIUM", "observium:alerts", JsonNode.class))
+    void apiDownRedisDownThrowsAndMarksObserviumUnavailable() {
+        when(integrationCacheService.getSnapshot("OBSERVIUM", "alerts", JsonNode.class))
                 .thenReturn(Optional.empty());
 
-        @SuppressWarnings("unchecked")
-        ApiResponse<JsonNode> response = (ApiResponse<JsonNode>) ReflectionTestUtils.invokeMethod(
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
                 observiumClientX,
-                "cachedFallback",
+                "cachedFallbackResponse",
                 "alerts",
                 "Alerts fetched successfully",
                 new IntegrationUnavailableException("OBSERVIUM", "Observium API down")
-        );
+        )).isInstanceOf(IntegrationUnavailableException.class)
+                .hasMessageContaining("Observium API down");
 
-        assertThat(response).isNotNull();
-        assertThat(response.isSuccess()).isFalse();
-        assertThat(response.getData()).isNotNull();
-        assertThat(response.getData().isArray()).isTrue();
-        assertThat(response.getData()).isEmpty();
         verify(availabilityService).markUnavailable(
                 eq("OBSERVIUM"),
-                eq("Observium API unavailable and no usable Redis snapshot for alerts")
+                eq("Observium API down")
         );
     }
 
     @Test
-    void circuitBreakerOpenUsesRedisFallbackAndMarksObserviumUnavailable() {
+    void circuitBreakerOpenUsesRedisFallbackAndMarksObserviumDegraded() {
         JsonNode snapshot = OBJECT_MAPPER.createArrayNode().add(OBJECT_MAPPER.createObjectNode().put("device", "fw1"));
-        when(integrationCacheService.getSnapshot("OBSERVIUM", "observium:devices", JsonNode.class))
+        when(integrationCacheService.getSnapshot("OBSERVIUM", "devices", JsonNode.class))
                 .thenReturn(Optional.of(snapshot));
 
         CallNotPermittedException callNotPermittedException =
@@ -107,16 +103,16 @@ class ObserviumClientXFallbackTest {
         @SuppressWarnings("unchecked")
         ApiResponse<JsonNode> response = (ApiResponse<JsonNode>) ReflectionTestUtils.invokeMethod(
                 observiumClientX,
-                "devicesFallback",
+                "getDevicesFallback",
                 callNotPermittedException
         );
 
         assertThat(response).isNotNull();
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isEqualTo(snapshot);
-        verify(availabilityService).markUnavailable(
+        verify(availabilityService).markDegraded(
                 eq("OBSERVIUM"),
-                eq("Observium API unavailable, serving Redis snapshot for devices")
+                eq("CircuitBreaker 'observiumApi' is CLOSED and does not permit further calls")
         );
     }
 }
