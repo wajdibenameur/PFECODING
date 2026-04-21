@@ -7,23 +7,27 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@Setter@Builder
+@Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Intervention {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class Intervention extends BaseEntity {
 
     private String action;
+
+    @Column(length = 4000)
     private String comment;
+
     private LocalDateTime timestamp;
+
+    @Column(length = 2000)
     private String result;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "performed_by_id")
     private User performedBy;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ticket_id")
     private Ticket ticket;
 }
