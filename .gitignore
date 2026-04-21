@@ -69,3 +69,4 @@ main/resources/
 
 mintty.exe.stackdump
 *.stackdump
+src/main/resources/sql
