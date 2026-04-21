@@ -14,6 +14,7 @@ import tn.iteam.service.ServiceStatusPersistenceService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -30,6 +31,9 @@ public class CameraIntegrationService implements IntegrationService {
     @Value("${camera.subnet:192.168.11}")
     private String cameraSubnet;
 
+    @Value("${camera.ports:37777,554}")
+    private String cameraPorts;
+
     @Override
     public MonitoringSourceType getSourceType() {
         return MonitoringSourceType.CAMERA;
@@ -42,7 +46,7 @@ public class CameraIntegrationService implements IntegrationService {
 
     @Override
     public void refreshHosts() {
-        List<ServiceStatusDTO> statuses = List.copyOf(cameraAdapter.fetchAll(cameraSubnet));
+        List<ServiceStatusDTO> statuses = List.copyOf(cameraAdapter.fetchAll(cameraSubnet, parsePorts()));
         serviceStatusPersistenceService.saveAll(statuses);
 
         List<UnifiedMonitoringHostDTO> hosts = statuses.stream()
@@ -56,6 +60,21 @@ public class CameraIntegrationService implements IntegrationService {
         );
 
         log.debug("Stored {} camera host snapshot entries", hosts.size());
+    }
+
+    private List<Integer> parsePorts() {
+        return java.util.Arrays.stream(cameraPorts.split("\\s*,\\s*"))
+                .filter(token -> !token.isBlank())
+                .map(token -> {
+                    try {
+                        return Integer.parseInt(token.trim());
+                    } catch (NumberFormatException exception) {
+                        log.warn("Ignoring invalid camera port '{}'", token);
+                        return null;
+                    }
+                })
+                .filter(port -> port != null && port > 0)
+                .collect(Collectors.toList());
     }
 
     private UnifiedMonitoringHostDTO toHost(ServiceStatusDTO dto) {
