@@ -203,11 +203,14 @@ export class MonitoringZkBioPageComponent implements OnInit {
     if (!coverage) {
       return 'unknown';
     }
-    if (coverage === 'supported') {
-      return 'supported';
+    if (coverage === 'native') {
+      return 'native';
     }
-    if (coverage === 'not_supported') {
-      return 'not supported';
+    if (coverage === 'synthetic') {
+      return 'synthetic';
+    }
+    if (coverage === 'not_applicable') {
+      return 'hosts only';
     }
     return coverage.replace(/_/g, ' ');
   }
