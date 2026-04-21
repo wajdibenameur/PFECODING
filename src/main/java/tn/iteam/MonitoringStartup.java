@@ -1,14 +1,18 @@
 package tn.iteam;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.stereotype.Component;
 import tn.iteam.integration.CameraIntegrationService;
 import tn.iteam.integration.IntegrationService;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.websocket.MonitoringWebSocketPublisher;
 import tn.iteam.websocket.ZkBioWebSocketPublisher;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Single bootstrap entry point for monitoring warmup.
@@ -21,6 +25,7 @@ import tn.iteam.websocket.ZkBioWebSocketPublisher;
 @Slf4j
 @Component
 public class MonitoringStartup {
+    private final AtomicBoolean warmupStarted = new AtomicBoolean(false);
 
     private final IntegrationService zabbixIntegrationService;
     private final IntegrationService observiumIntegrationService;
@@ -45,8 +50,16 @@ public class MonitoringStartup {
         this.zkBioWebSocketPublisher = zkBioWebSocketPublisher;
     }
 
-    @PostConstruct
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
     public void warmupInitialSnapshots() {
+        if (!warmupStarted.compareAndSet(false, true)) {
+            log.debug("Monitoring warmup already started; skipping duplicate trigger.");
+            return;
+        }
+
+        log.info("Application is ready; starting monitoring warmup in the background.");
+
         refreshSafely("Zabbix", () -> {
             zabbixIntegrationService.refresh();
             monitoringWebSocketPublisher.publishProblemsFromSnapshot(MonitoringSourceType.ZABBIX);
@@ -67,6 +80,8 @@ public class MonitoringStartup {
             zkBioWebSocketPublisher.publishStatusFromSnapshot();
         });
         refreshSafely("Camera", cameraIntegrationService::refresh);
+
+        log.info("Monitoring warmup completed.");
     }
 
     private void refreshSafely(String source, Runnable action) {

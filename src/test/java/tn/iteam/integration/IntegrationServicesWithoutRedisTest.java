@@ -184,8 +184,9 @@ class IntegrationServicesWithoutRedisTest {
                 snapshotStore
         );
         ReflectionTestUtils.setField(service, "cameraSubnet", "192.168.11");
+        ReflectionTestUtils.setField(service, "cameraPorts", "37777,554");
 
-        when(cameraAdapter.fetchAll("192.168.11")).thenReturn(List.of(serviceStatus("camera-1", "10.0.0.40")));
+        when(cameraAdapter.fetchAll("192.168.11", List.of(37777, 554))).thenReturn(List.of(serviceStatus("camera-1", "10.0.0.40")));
 
         service.refresh();
 

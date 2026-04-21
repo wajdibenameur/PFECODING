@@ -17,6 +17,7 @@ public class GlobalExceptionHandler {
     private static final String INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
     private static final String INTERNAL_ERROR_MESSAGE = "Internal server error";
     private static final String SYSTEM_SOURCE = "SYSTEM";
+    private static final String TICKETING_SOURCE = "TICKETING";
     private static final int INTERNAL_SERVER_ERROR_STATUS = 500;
 
     @ExceptionHandler(IntegrationException.class)
@@ -37,6 +38,24 @@ public class GlobalExceptionHandler {
                         .errorCode(ex.getErrorCode())
                         .message(ex.getMessage())
                         .source(ex.getSource())
+                        .path(request.getRequestURI())
+                        .build());
+    }
+
+    @ExceptionHandler(TicketingException.class)
+    public ResponseEntity<ApiErrorResponse> handleTicketingException(
+            TicketingException ex,
+            HttpServletRequest request
+    ) {
+        log.warn("Ticketing error: {}", ex.getMessage());
+
+        return ResponseEntity.status(ex.getHttpStatus())
+                .body(ApiErrorResponse.builder()
+                        .timestamp(Instant.now())
+                        .status(ex.getHttpStatus().value())
+                        .errorCode(ex.getErrorCode())
+                        .message(ex.getMessage())
+                        .source(TICKETING_SOURCE)
                         .path(request.getRequestURI())
                         .build());
     }
