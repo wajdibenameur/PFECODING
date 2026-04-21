@@ -2,9 +2,6 @@ package tn.iteam.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -23,10 +20,7 @@ import lombok.NoArgsConstructor;
                 @UniqueConstraint(name = "uk_zkbio_metric_host_item_ts", columnNames = {"hostId", "itemId", "timestamp"})
         }
 )
-public class ZkBioMetric {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class ZkBioMetric extends BaseEntity {
     @Column(nullable = false)
     private String hostId;
     @Column(nullable = false)
