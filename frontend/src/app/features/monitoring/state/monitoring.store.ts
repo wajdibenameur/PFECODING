@@ -32,6 +32,9 @@ interface HostAccumulator {
   lastMetricTimestamp: number | null;
 }
 
+type DatasetMetadata = Record<string, string>;
+type DatasetKind = 'hosts' | 'problems' | 'metrics';
+
 @Injectable()
 export class MonitoringStore {
   private readonly destroyRef = inject(DestroyRef);
@@ -49,6 +52,8 @@ export class MonitoringStore {
   readonly hostsFreshness = signal<Record<string, string>>({});
   readonly problemsFreshness = signal<Record<string, string>>({});
   readonly metricsFreshness = signal<Record<string, string>>({});
+  readonly hostsCoverage = signal<Record<string, string>>({});
+  readonly problemsCoverage = signal<Record<string, string>>({});
   readonly metricsCoverage = signal<Record<string, string>>({});
   readonly unifiedDegraded = signal(false);
 
@@ -98,15 +103,18 @@ export class MonitoringStore {
     return (['ZABBIX', 'OBSERVIUM', 'CAMERA', 'ZKBIO'] as MonitoringSource[]).map((source) => {
       const availability = availabilityMap.get(source);
       const assets = assetsBySource.get(source) ?? [];
-      const coverage = this.metricsCoverageLabel(source);
-      const metricsFreshness = this.readMetricsFreshness(source);
+      const coverage = this.readSourceCoverage(source);
       const availabilityStatus = this.mapAvailability(availability);
       const noteParts = [
-        `Hosts: ${this.hostsFreshness()[source] ?? 'snapshot_missing'}`,
-        `Problems: ${this.problemsFreshness()[source] ?? 'snapshot_missing'}`,
+        `Hosts: ${this.readDatasetFreshness('hosts', source)}`,
+        `Problems: ${this.readDatasetFreshness('problems', source)}`,
         source === 'CAMERA'
           ? null
-          : `Metrics: ${coverage === 'not_applicable' ? 'not_applicable' : metricsFreshness}`
+          : `Metrics: ${
+              coverage === 'not_applicable'
+                ? 'not_applicable'
+                : this.readDatasetFreshness('metrics', source)
+            }`
       ].filter((value): value is string => Boolean(value));
 
       if (availability?.lastError) {
@@ -215,6 +223,8 @@ export class MonitoringStore {
         this.hostsFreshness.set(hostsResponse.freshness);
         this.problemsFreshness.set(problemsResponse.freshness);
         this.metricsFreshness.set(metricsResponse.freshness);
+        this.hostsCoverage.set(hostsResponse.coverage);
+        this.problemsCoverage.set(problemsResponse.coverage);
         this.metricsCoverage.set(metricsResponse.coverage);
         this.unifiedDegraded.set(
           hostsResponse.degraded || problemsResponse.degraded || metricsResponse.degraded
@@ -255,7 +265,7 @@ export class MonitoringStore {
       }
     });
 
-    this.realtime.sourceAvailability$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.realtime.monitoringSources$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (incoming) => {
         this.sourceAvailability.set(
           this.mergeSourceAvailability(this.sourceAvailability(), incoming)
@@ -546,16 +556,50 @@ export class MonitoringStore {
     return 'UNKNOWN';
   }
 
-  private metricsCoverageLabel(source: MonitoringSource): SourceHealthVm['coverage'] {
-    const coverage = (this.metricsCoverage()[source] ?? '').toLowerCase();
+  private readSourceCoverage(source: MonitoringSource): SourceHealthVm['coverage'] {
+    const coverage = this.readDatasetCoverage('metrics', source).toLowerCase();
     if (coverage === 'native' || coverage === 'synthetic' || coverage === 'not_applicable') {
       return coverage;
     }
     return 'unknown';
   }
 
-  private readMetricsFreshness(source: MonitoringSource): string {
-    return this.metricsFreshness()[source] ?? 'snapshot_missing';
+  private readDatasetFreshness(dataset: DatasetKind, source: MonitoringSource): string {
+    return this.readDatasetMetadata(this.freshnessSignal(dataset), source, 'snapshot_missing');
+  }
+
+  private readDatasetCoverage(dataset: DatasetKind, source: MonitoringSource): string {
+    return this.readDatasetMetadata(this.coverageSignal(dataset), source, '');
+  }
+
+  private readDatasetMetadata(
+    metadata: DatasetMetadata,
+    source: MonitoringSource,
+    fallback: string
+  ): string {
+    return metadata[source] ?? fallback;
+  }
+
+  private freshnessSignal(dataset: DatasetKind): DatasetMetadata {
+    switch (dataset) {
+      case 'hosts':
+        return this.hostsFreshness();
+      case 'problems':
+        return this.problemsFreshness();
+      case 'metrics':
+        return this.metricsFreshness();
+    }
+  }
+
+  private coverageSignal(dataset: DatasetKind): DatasetMetadata {
+    switch (dataset) {
+      case 'hosts':
+        return this.hostsCoverage();
+      case 'problems':
+        return this.problemsCoverage();
+      case 'metrics':
+        return this.metricsCoverage();
+    }
   }
 
   private markRealtimeFreshness(
