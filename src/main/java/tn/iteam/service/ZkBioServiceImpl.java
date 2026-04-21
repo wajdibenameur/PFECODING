@@ -3,10 +3,9 @@ package tn.iteam.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import tn.iteam.adapter.zkbio.ZkBioAdapter;
-import tn.iteam.client.ZkBioClient;
+import tn.iteam.client.ZkBioClientX;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.dto.ZkBioAttendanceDTO;
 import tn.iteam.dto.ZkBioProblemDTO;
@@ -17,9 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementation of ZkBioServiceInterface.
- * This service contains only business operations (status, devices, attendance, users).
- * For unified monitoring operations, use ZkBioMonitoringService instead.
+ * Business service for ZKBio operations only.
+ * No orchestration, no snapshot publication, no integration refresh logic here.
  */
 @Slf4j
 @Service
@@ -27,9 +25,8 @@ import java.util.List;
 public class ZkBioServiceImpl implements ZkBioServiceInterface {
 
     private final ZkBioAdapter zkBioAdapter;
-    private final ZkBioClient zkBioClient;
+    private final ZkBioClientX zkBioClient;
     private final ZkBioAttendanceMapper attendanceMapper;
-    private final MonitoringService monitoringService;
 
     @Override
     public ServiceStatusDTO getServerStatus() {
@@ -37,6 +34,7 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
         try {
             JsonNode status = zkBioClient.getStatus();
             URI baseUri = zkBioClient.getBaseUri();
+
             ServiceStatusDTO dto = new ServiceStatusDTO();
             dto.setSource("ZKBIO");
             dto.setName("ZKBio Server");
@@ -48,6 +46,7 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
             return dto;
         } catch (Exception e) {
             log.warn("ZKBio status degraded: {}", e.getMessage());
+
             ServiceStatusDTO dto = new ServiceStatusDTO();
             dto.setSource("ZKBIO");
             dto.setName("ZKBio Server");
@@ -108,13 +107,6 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
         }
 
         return dtos;
-    }
-
-    @Override
-    @Async
-    public void collectData() {
-        log.info("Triggering manual ZKBio data collection");
-        monitoringService.collectZkBio();
     }
 
     private List<ZkBioAttendanceDTO> mapAttendanceLogs(JsonNode logs) {
