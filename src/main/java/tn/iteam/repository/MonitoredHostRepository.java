@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface MonitoredHostRepository extends JpaRepository<MonitoredHost, String> {
+public interface MonitoredHostRepository extends JpaRepository<MonitoredHost, Long> {
     Optional<MonitoredHost> findFirstByHostIdAndSource(String hostId, String source);
     List<MonitoredHost> findBySourceOrderByNameAsc(String source);
 }
