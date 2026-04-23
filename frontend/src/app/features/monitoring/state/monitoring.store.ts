@@ -24,6 +24,7 @@ interface HostAccumulator {
   hostname: string;
   ip: string | null;
   port: number | null;
+  lastCheck: string | null;
   source: MonitoringSource;
   category: string | null;
   status: string | null;
@@ -79,10 +80,11 @@ export class MonitoringStore {
 
   readonly problemSummary = computed<ProblemSummaryVm>(() => {
     const problems = this.problems();
+    const severeProblems = problems.filter((problem) => this.isDashboardProblem(problem));
     return {
-      totalAlerts: problems.length,
-      critical: problems.filter((problem) => this.severityRank(problem.severity) >= 5).length,
-      high: problems.filter((problem) => this.severityRank(problem.severity) === 4).length,
+      totalAlerts: severeProblems.length,
+      critical: severeProblems.filter((problem) => this.severityRank(problem.severity) >= 5).length,
+      high: severeProblems.filter((problem) => this.severityRank(problem.severity) === 4).length,
       medium: problems.filter((problem) => this.severityRank(problem.severity) === 3).length,
       warning: problems.filter((problem) => this.severityRank(problem.severity) === 2).length,
       info: problems.filter((problem) => this.severityRank(problem.severity) <= 1).length
@@ -390,7 +392,13 @@ export class MonitoringStore {
     const hostMap = new Map<string, HostAccumulator>();
 
     for (const host of hosts) {
-      const key = this.hostEntityKey(host.source, host.hostId, host.name, host.id);
+      const key = this.assetCorrelationKey(
+        host.source,
+        host.ip,
+        host.name,
+        host.hostId,
+        host.id
+      );
       hostMap.set(key, {
         hostId: host.hostId,
         hostname: this.normalizeHost(host.name ?? host.hostId ?? host.id),
@@ -399,6 +407,7 @@ export class MonitoringStore {
         source: (host.source?.toUpperCase() ?? 'ZABBIX') as MonitoringSource,
         category: host.category ?? null,
         status: host.status ?? null,
+        lastCheck: host.lastCheck ?? null,
         metricKeys: new Set<string>(),
         problemCount: 0,
         lastMetricTimestamp: null
@@ -406,19 +415,17 @@ export class MonitoringStore {
     }
 
     for (const metric of metrics) {
-      const key = this.hostEntityKey(metric.source, metric.hostId, metric.hostName, metric.id);
-      const current = hostMap.get(key) ?? {
-        hostId: metric.hostId,
-        hostname: this.normalizeHost(metric.hostName || metric.hostId),
-        ip: metric.ip ?? null,
-        port: metric.port ?? null,
-        source: metric.source,
-        category: null,
-        status: null,
-        metricKeys: new Set<string>(),
-        problemCount: 0,
-        lastMetricTimestamp: null
-      };
+      const key = this.assetCorrelationKey(
+        metric.source,
+        metric.ip,
+        metric.hostName,
+        metric.hostId,
+        metric.id
+      );
+      const current = hostMap.get(key);
+      if (!current) {
+        continue;
+      }
 
       if (!current.ip) {
         current.ip = metric.ip ?? current.ip;
@@ -436,24 +443,17 @@ export class MonitoringStore {
     }
 
     for (const problem of problems) {
-      const key = this.hostEntityKey(
+      const key = this.assetCorrelationKey(
         problem.source,
-        problem.hostId,
+        problem.ip,
         problem.hostName,
+        problem.hostId,
         problem.id
       );
-      const current = hostMap.get(key) ?? {
-        hostId: problem.hostId,
-        hostname: this.normalizeHost(problem.hostName || problem.hostId || problem.problemId),
-        ip: problem.ip ?? null,
-        port: problem.port ?? null,
-        source: (problem.source?.toUpperCase() ?? 'ZABBIX') as MonitoringSource,
-        category: null,
-        status: null,
-        metricKeys: new Set<string>(),
-        problemCount: 0,
-        lastMetricTimestamp: null
-      };
+      const current = hostMap.get(key);
+      if (!current) {
+        continue;
+      }
 
       if (!current.ip) {
         current.ip = problem.ip ?? current.ip;
@@ -461,7 +461,9 @@ export class MonitoringStore {
       if (current.port == null && problem.port != null) {
         current.port = problem.port;
       }
-      current.problemCount += 1;
+      if (this.isDashboardProblem(problem)) {
+        current.problemCount += 1;
+      }
       hostMap.set(key, current);
     }
 
@@ -480,11 +482,8 @@ export class MonitoringStore {
         return {
           id: `${entry.source}:${entry.hostId ?? entry.hostname}`,
           hostname: entry.hostname,
-          address:
-            entry.ip && entry.port != null
-              ? `${entry.ip}:${entry.port}`
-              : entry.ip ?? 'IP_UNKNOWN',
-          ip: entry.ip ?? 'IP_UNKNOWN',
+          lastCheck: entry.lastCheck,
+          ip: entry.ip ?? '--',
           port: entry.port,
           source: entry.source,
           category,
@@ -495,6 +494,40 @@ export class MonitoringStore {
         } as GlobalAssetVm;
       })
       .sort((a, b) => a.hostname.localeCompare(b.hostname));
+  }
+
+  private assetCorrelationKey(
+    source: string | null | undefined,
+    ip: string | null | undefined,
+    name: string | null | undefined,
+    hostId: string | null | undefined,
+    id: string | null | undefined
+  ): string {
+    const normalizedSource = (source ?? 'UNKNOWN').toUpperCase();
+    const normalizedIp = this.normalizeEntityValue(ip);
+    if (normalizedIp) {
+      return `${normalizedSource}:IP:${normalizedIp}`;
+    }
+
+    const normalizedName = this.normalizeEntityValue(name);
+    if (normalizedName) {
+      return `${normalizedSource}:NAME:${normalizedName}`;
+    }
+
+    return `${normalizedSource}:ID:${hostId ?? id ?? 'UNKNOWN_HOST'}`;
+  }
+
+  private normalizeEntityValue(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim();
+    if (!normalized || normalized === 'IP_UNKNOWN' || normalized === 'UNKNOWN_HOST') {
+      return null;
+    }
+
+    return normalized.toUpperCase();
   }
 
   private normalizeHost(host: string | null | undefined): string {
@@ -635,6 +668,10 @@ export class MonitoringStore {
       return 1;
     }
     return Number(value ?? 0) || 0;
+  }
+
+  private isDashboardProblem(problem: MonitoringProblem): boolean {
+    return this.severityRank(problem.severity) >= 4;
   }
 
   private scheduleSnapshotRefresh(): void {
