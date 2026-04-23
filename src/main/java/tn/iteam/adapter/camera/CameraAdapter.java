@@ -33,15 +33,29 @@ public class CameraAdapter {
     }
 
     public List<ServiceStatusDTO> fetchAll(String subnet, List<Integer> ports) {
-        log.info("Scanning cameras in subnet {} using ports {}", subnet, ports);
+        return fetchAll(List.of(subnet), ports);
+    }
+
+    public List<ServiceStatusDTO> fetchAll(List<String> subnets, List<Integer> ports) {
+        List<String> sanitizedSubnets = subnets == null ? List.of() : subnets.stream()
+                .filter(subnet -> subnet != null && !subnet.isBlank())
+                .map(String::trim)
+                .toList();
+        if (sanitizedSubnets.isEmpty()) {
+            return List.of();
+        }
+
+        log.info("Scanning cameras in subnets {} using ports {}", sanitizedSubnets, ports);
         List<ServiceStatusDTO> list = new ArrayList<>();
         ExecutorService executor = Executors.newFixedThreadPool(MAX_WORKERS);
 
         try {
             List<Future<Optional<ServiceStatusDTO>>> futures = new ArrayList<>();
-            for (int i = 1; i <= 254; i++) {
-                String ip = subnet + "." + i;
-                futures.add(executor.submit(() -> scanIp(ip, ports)));
+            for (String subnet : sanitizedSubnets) {
+                for (int i = 1; i <= 254; i++) {
+                    String ip = subnet + "." + i;
+                    futures.add(executor.submit(() -> scanIp(ip, ports)));
+                }
             }
 
             for (Future<Optional<ServiceStatusDTO>> future : futures) {
@@ -58,12 +72,12 @@ public class CameraAdapter {
             list.sort(Comparator.comparing(ServiceStatusDTO::getIp, Comparator.nullsLast(String::compareTo)));
             availabilityService.markAvailable(MonitoringConstants.SOURCE_CAMERA);
             if (list.isEmpty()) {
-                log.warn("No cameras detected in subnet {}", subnet);
+                log.warn("No cameras detected in subnets {}", sanitizedSubnets);
             }
             return list;
         } catch (Exception e) {
             availabilityService.markUnavailable(MonitoringConstants.SOURCE_CAMERA, e.getMessage());
-            log.error("Unexpected error while scanning cameras in subnet {}", subnet, e);
+            log.error("Unexpected error while scanning cameras in subnets {}", sanitizedSubnets, e);
             return list;
         } finally {
             executor.shutdownNow();
