@@ -31,15 +31,14 @@ public class GlobalExceptionHandler {
             log.error("Integration error from {}: {}", ex.getSource(), ex.getMessage(), ex);
         }
 
-        return ResponseEntity.status(ex.getHttpStatus())
-                .body(ApiErrorResponse.builder()
-                        .timestamp(Instant.now())
-                        .status(ex.getHttpStatus().value())
-                        .errorCode(ex.getErrorCode())
-                        .message(ex.getMessage())
-                        .source(ex.getSource())
-                        .path(request.getRequestURI())
-                        .build());
+        return buildErrorResponse(
+                ResponseEntity.status(ex.getHttpStatus()),
+                ex.getHttpStatus().value(),
+                ex.getErrorCode(),
+                ex.getMessage(),
+                ex.getSource(),
+                request
+        );
     }
 
     @ExceptionHandler(TicketingException.class)
@@ -49,29 +48,45 @@ public class GlobalExceptionHandler {
     ) {
         log.warn("Ticketing error: {}", ex.getMessage());
 
-        return ResponseEntity.status(ex.getHttpStatus())
-                .body(ApiErrorResponse.builder()
-                        .timestamp(Instant.now())
-                        .status(ex.getHttpStatus().value())
-                        .errorCode(ex.getErrorCode())
-                        .message(ex.getMessage())
-                        .source(TICKETING_SOURCE)
-                        .path(request.getRequestURI())
-                        .build());
+        return buildErrorResponse(
+                ResponseEntity.status(ex.getHttpStatus()),
+                ex.getHttpStatus().value(),
+                ex.getErrorCode(),
+                ex.getMessage(),
+                TICKETING_SOURCE,
+                request
+        );
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleAllExceptions(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception", ex);
 
-        return ResponseEntity.internalServerError()
-                .body(ApiErrorResponse.builder()
-                        .timestamp(Instant.now())
-                        .status(INTERNAL_SERVER_ERROR_STATUS)
-                        .errorCode(INTERNAL_ERROR_CODE)
-                        .message(INTERNAL_ERROR_MESSAGE)
-                        .source(SYSTEM_SOURCE)
-                        .path(request.getRequestURI())
-                        .build());
+        return buildErrorResponse(
+                ResponseEntity.internalServerError(),
+                INTERNAL_SERVER_ERROR_STATUS,
+                INTERNAL_ERROR_CODE,
+                INTERNAL_ERROR_MESSAGE,
+                SYSTEM_SOURCE,
+                request
+        );
+    }
+
+    private ResponseEntity<ApiErrorResponse> buildErrorResponse(
+            ResponseEntity.BodyBuilder responseBuilder,
+            int status,
+            String errorCode,
+            String message,
+            String source,
+            HttpServletRequest request
+    ) {
+        return responseBuilder.body(ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(status)
+                .errorCode(errorCode)
+                .message(message)
+                .source(source)
+                .path(request.getRequestURI())
+                .build());
     }
 }
