@@ -1,6 +1,12 @@
 package tn.iteam.util;
 
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import org.springframework.web.reactive.function.client.WebClientException;
+import tn.iteam.exception.IntegrationResponseException;
+import tn.iteam.exception.IntegrationTimeoutException;
+import tn.iteam.exception.IntegrationUnavailableException;
+
+import java.net.SocketTimeoutException;
+import java.util.concurrent.TimeoutException;
 
 public final class IntegrationClientSupport {
 
@@ -11,16 +17,11 @@ public final class IntegrationClientSupport {
     public static final String ERROR_FIELD = "error";
     public static final String UNKNOWN = "UNKNOWN";
 
-    private static final String HTTP_PREFIX = "HTTP ";
     private static final String ON_SEPARATOR = " on ";
     private static final String DURING_SEPARATOR = " during ";
     private static final String API_SUFFIX = " API";
-    private static final String TIMEOUT_ON_PREFIX = "Timeout on ";
-    private static final String INVALID_JSON_ON_PREFIX = "Invalid JSON on ";
-    private static final String TRANSPORT_ERROR_ON_PREFIX = "Transport error on ";
     private static final String UNEXPECTED_PREFIX = "Unexpected ";
     private static final String ERROR_SUFFIX = " error";
-    private static final String RETURNED_HTTP_SEPARATOR = " returned HTTP ";
     private static final String TIMEOUT_SEPARATOR = " timeout on ";
     private static final String UNREACHABLE_SEPARATOR = " unreachable on ";
     private static final String INVALID_JSON_RESPONSE_PREFIX = "Invalid JSON response from ";
@@ -32,20 +33,8 @@ public final class IntegrationClientSupport {
         return responseField + API_SUFFIX;
     }
 
-    public static String httpOn(String target, int statusCode) {
-        return HTTP_PREFIX + statusCode + ON_SEPARATOR + target;
-    }
-
     public static String returnedHttp(String sourceLabel, int statusCode, String target) {
-        return sourceLabel + RETURNED_HTTP_SEPARATOR + statusCode + ON_SEPARATOR + target;
-    }
-
-    public static String returnedHttpDuring(String sourceLabel, int statusCode, String context) {
-        return sourceLabel + RETURNED_HTTP_SEPARATOR + statusCode + DURING_SEPARATOR + context;
-    }
-
-    public static String timeoutOn(String target) {
-        return TIMEOUT_ON_PREFIX + target;
+        return sourceLabel + " returned HTTP " + statusCode + ON_SEPARATOR + target;
     }
 
     public static String timeout(String sourceLabel, String target) {
@@ -56,24 +45,12 @@ public final class IntegrationClientSupport {
         return sourceLabel + " timeout" + DURING_SEPARATOR + context;
     }
 
-    public static String invalidJsonOn(String target) {
-        return INVALID_JSON_ON_PREFIX + target;
-    }
-
     public static String invalidJsonResponse(String sourceLabel, String target) {
         return INVALID_JSON_RESPONSE_PREFIX + sourceLabel + ON_SEPARATOR + target;
     }
 
-    public static String transportErrorOn(String target) {
-        return TRANSPORT_ERROR_ON_PREFIX + target;
-    }
-
     public static String unreachable(String sourceLabel, String target) {
         return sourceLabel + UNREACHABLE_SEPARATOR + target;
-    }
-
-    public static String unexpectedErrorOn(String target) {
-        return UNEXPECTED_PREFIX + target + ERROR_SUFFIX;
     }
 
     public static String unexpectedError(String sourceLabel, String target) {
@@ -84,23 +61,88 @@ public final class IntegrationClientSupport {
         return DURING_SEPARATOR + context;
     }
 
-    public static String duringMessage(String prefix, String context) {
-        return prefix + DURING_SEPARATOR + context;
-    }
-
     public static String parenthesized(String value) {
         return '(' + value + ')';
     }
 
-    public static String stableFallbackReason(String sourceLabel, String defaultReason, Throwable throwable) {
-        if (throwable instanceof CallNotPermittedException) {
-            return sourceLabel + " circuit breaker open";
+    public static boolean isTimeoutException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof TimeoutException || current instanceof SocketTimeoutException) {
+                return true;
+            }
+            if ("io.netty.handler.timeout.ReadTimeoutException".equals(current.getClass().getName())) {
+                return true;
+            }
+            if ("io.netty.channel.ConnectTimeoutException".equals(current.getClass().getName())) {
+                return true;
+            }
+            if (current instanceof WebClientException exception
+                    && exception.getMessage() != null
+                    && exception.getMessage().toLowerCase().contains("timed out")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    public static boolean containsInterruptedException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    public static RuntimeException mapTransportException(
+            String source,
+            String sourceLabel,
+            String context,
+            Throwable throwable
+    ) {
+        if (throwable instanceof IntegrationUnavailableException e) {
+            return e;
+        }
+        if (throwable instanceof IntegrationTimeoutException e) {
+            return e;
+        }
+        if (throwable instanceof IntegrationResponseException e) {
+            return e;
         }
 
-        if (throwable != null && throwable.getMessage() != null && !throwable.getMessage().isBlank()) {
-            return throwable.getMessage();
+        if (containsInterruptedException(throwable)) {
+            Thread.currentThread().interrupt();
+            return new IntegrationUnavailableException(
+                    source,
+                    sourceLabel + " request interrupted" + during(context),
+                    throwable
+            );
         }
 
-        return defaultReason;
+        if (isTimeoutException(throwable)) {
+            return new IntegrationTimeoutException(
+                    source,
+                    timeoutDuring(sourceLabel, context),
+                    throwable
+            );
+        }
+
+        if (throwable instanceof WebClientException) {
+            return new IntegrationUnavailableException(
+                    source,
+                    unreachable(sourceLabel, context),
+                    throwable
+            );
+        }
+
+        return new IntegrationUnavailableException(
+                source,
+                unexpectedError(sourceLabel, context),
+                throwable
+        );
     }
 }

@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
 import tn.iteam.domain.ApiResponse;
 import tn.iteam.dto.SourceAvailabilityDTO;
 import tn.iteam.integration.IntegrationServiceRegistry;
-import tn.iteam.integration.ZkBioIntegrationOperations;
+import tn.iteam.integration.ZkBioRefreshOrchestrationService;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
@@ -27,7 +27,7 @@ public class MonitoringController {
     private final MonitoringAggregationService aggregationService;
     private final SourceAvailabilityService sourceAvailabilityService;
     private final IntegrationServiceRegistry integrationServiceRegistry;
-    private final ZkBioIntegrationOperations zkBioIntegrationOperations;
+    private final ZkBioRefreshOrchestrationService zkBioRefreshOrchestrationService;
     private final MonitoringSnapshotPublicationService snapshotPublicationService;
 
     @GetMapping("/problems")
@@ -51,26 +51,28 @@ public class MonitoringController {
     }
 
     @PostMapping("/collect")
-    public ResponseEntity<ApiResponse<Void>> collectAll() {
-        integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX).refresh();
-        integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM).refresh();
-        integrationServiceRegistry.getRequired(MonitoringSourceType.ZKBIO).refresh();
-        zkBioIntegrationOperations.refreshAttendance();
-        integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA).refresh();
-        snapshotPublicationService.publishMonitoringSnapshots(List.of(
-                MonitoringSourceType.ZABBIX,
-                MonitoringSourceType.OBSERVIUM,
-                MonitoringSourceType.ZKBIO
-        ));
-        snapshotPublicationService.publishZkBioSnapshots();
-
-        return ResponseEntity.ok(
-                ApiResponse.<Void>builder()
-                        .success(true)
-                        .message("ALL SERVICES COLLECTED")
-                        .source("SYSTEM")
-                        .build()
-        );
+    public Mono<ResponseEntity<ApiResponse<Void>>> collectAll() {
+        return Mono.whenDelayError(
+                        integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX).refreshAsync(),
+                        integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM).refreshAsync(),
+                        zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync(),
+                        integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA).refreshAsync()
+                )
+                .then(Mono.fromRunnable(() -> {
+                    snapshotPublicationService.publishMonitoringSnapshots(List.of(
+                            MonitoringSourceType.ZABBIX,
+                            MonitoringSourceType.OBSERVIUM,
+                            MonitoringSourceType.ZKBIO
+                    ));
+                    snapshotPublicationService.publishZkBioSnapshots();
+                }))
+                .thenReturn(ResponseEntity.ok(
+                        ApiResponse.<Void>builder()
+                                .success(true)
+                                .message("ALL SERVICES COLLECTED")
+                                .source("SYSTEM")
+                                .build()
+                ));
     }
 
     @PostMapping("/collect/zabbix")

@@ -6,9 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import tn.iteam.dto.SourceAvailabilityDTO;
-import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
+import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.snapshot.SnapshotStore;
 
 import java.util.List;
@@ -27,16 +27,6 @@ public class MonitoringWebSocketPublisher {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final SnapshotStore snapshotStore;
-
-    public void publishProblems(List<UnifiedMonitoringProblemDTO> problems) {
-        log.debug("Publishing {} monitoring problems to {}", problems.size(), TOPIC_PROBLEMS);
-        messagingTemplate.convertAndSend(TOPIC_PROBLEMS, problems);
-    }
-
-    public void publishMetrics(List<UnifiedMonitoringMetricDTO> metrics) {
-        log.debug("Publishing {} monitoring metrics to {}", metrics.size(), TOPIC_METRICS);
-        messagingTemplate.convertAndSend(TOPIC_METRICS, metrics);
-    }
 
     public void publishSourceAvailability(SourceAvailabilityDTO event) {
         log.debug("Publishing source availability update for {} to {}", event.getSource(), TOPIC_SOURCES);
