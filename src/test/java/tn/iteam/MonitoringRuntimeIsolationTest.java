@@ -2,19 +2,20 @@ package tn.iteam;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.http.ResponseEntity;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import tn.iteam.controller.MonitoringController;
 import tn.iteam.domain.ApiResponse;
+import tn.iteam.integration.AsyncIntegrationService;
 import tn.iteam.integration.IntegrationServiceRegistry;
-import tn.iteam.integration.CameraIntegrationService;
-import tn.iteam.integration.ObserviumIntegrationService;
-import tn.iteam.integration.ZabbixIntegrationService;
-import tn.iteam.integration.ZkBioIntegrationService;
+import tn.iteam.integration.ZkBioIntegrationOperations;
+import tn.iteam.integration.ZkBioRefreshOrchestrationService;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
@@ -35,6 +36,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -42,16 +45,19 @@ import static org.mockito.Mockito.verify;
 class MonitoringRuntimeIsolationTest {
 
     @Mock
-    private ZabbixIntegrationService zabbixIntegrationService;
+    private AsyncIntegrationService zabbixIntegrationService;
 
     @Mock
-    private ObserviumIntegrationService observiumIntegrationService;
+    private AsyncIntegrationService observiumIntegrationService;
 
     @Mock
-    private ZkBioIntegrationService zkBioIntegrationService;
+    private ZkBioIntegrationOperations zkBioIntegrationService;
 
     @Mock
-    private CameraIntegrationService cameraIntegrationService;
+    private ZkBioRefreshOrchestrationService zkBioRefreshOrchestrationService;
+
+    @Mock
+    private AsyncIntegrationService cameraIntegrationService;
 
     @Mock
     private MonitoringWebSocketPublisher monitoringWebSocketPublisher;
@@ -60,10 +66,10 @@ class MonitoringRuntimeIsolationTest {
     private ZkBioWebSocketPublisher zkBioWebSocketPublisher;
 
     @Mock
-    private ZabbixIntegrationService concreteZabbixIntegrationService;
+    private AsyncIntegrationService concreteZabbixIntegrationService;
 
     @Mock
-    private ObserviumIntegrationService concreteObserviumIntegrationService;
+    private AsyncIntegrationService concreteObserviumIntegrationService;
 
     @Mock
     private MonitoringAggregationService monitoringAggregationService;
@@ -84,7 +90,7 @@ class MonitoringRuntimeIsolationTest {
     void startupWarmupSwallowsFailuresAndNeverTurnsIntoFatalError() {
         MonitoringStartup startup = new MonitoringStartup(
                 integrationServiceRegistry,
-                zkBioIntegrationService,
+                zkBioRefreshOrchestrationService,
                 snapshotPublicationService
         );
 
@@ -94,8 +100,8 @@ class MonitoringRuntimeIsolationTest {
 
         when(zabbixIntegrationService.refreshAsync()).thenReturn(Mono.error(new RuntimeException("redis-down-or-anything-else")));
         when(observiumIntegrationService.refreshAsync()).thenReturn(Mono.error(new RuntimeException("observium-failure")));
-        when(zkBioIntegrationService.refreshAsync()).thenReturn(Mono.error(new RuntimeException("zkbio-failure")));
-        when(zkBioIntegrationService.refreshAttendanceAsync()).thenReturn(Mono.error(new RuntimeException("zkbio-failure")));
+        when(zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync())
+                .thenReturn(Mono.error(new RuntimeException("zkbio-failure")));
         when(cameraIntegrationService.refreshAsync()).thenReturn(Mono.error(new RuntimeException("camera-failure")));
 
         assertThatCode(startup::warmupInitialSnapshots).doesNotThrowAnyException();
@@ -103,13 +109,31 @@ class MonitoringRuntimeIsolationTest {
 
     @Test
     void schedulersOnlyDependOnIntegrationServicesAndPublishers() {
-        ZabbixScheduler zabbixScheduler = new ZabbixScheduler(integrationServiceRegistry, snapshotPublicationService);
-        ObserviumScheduler observiumScheduler = new ObserviumScheduler(integrationServiceRegistry, snapshotPublicationService);
-        ObserviumHostsScheduler observiumHostsScheduler = new ObserviumHostsScheduler(integrationServiceRegistry);
-        ZkBioScheduler zkBioScheduler = new ZkBioScheduler(zkBioIntegrationService, snapshotPublicationService);
+        ZabbixScheduler zabbixScheduler = new ZabbixScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
+        ObserviumScheduler observiumScheduler = new ObserviumScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
+        ObserviumHostsScheduler observiumHostsScheduler = new ObserviumHostsScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService
+        );
+        ZkBioScheduler zkBioScheduler = new ZkBioScheduler(
+                zkBioIntegrationService,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
 
         when(integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)).thenReturn(concreteZabbixIntegrationService);
         when(integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)).thenReturn(concreteObserviumIntegrationService);
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.ZABBIX.name(), 60000L)).thenReturn(true);
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.OBSERVIUM.name(), 60000L)).thenReturn(true);
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.ZKBIO.name(), 60000L)).thenReturn(true);
 
         when(concreteZabbixIntegrationService.refreshMetricsAsync()).thenReturn(Mono.empty());
         when(concreteObserviumIntegrationService.refreshAsync()).thenReturn(Mono.empty());
@@ -134,6 +158,44 @@ class MonitoringRuntimeIsolationTest {
         verify(snapshotPublicationService).publishMonitoringSnapshots(MonitoringSourceType.OBSERVIUM);
         verify(snapshotPublicationService).publishMonitoringSnapshots(MonitoringSourceType.ZKBIO);
         verify(snapshotPublicationService).publishZkBioSnapshots();
+    }
+
+    @Test
+    void schedulersSkipRefreshDuringRetryCooldown() {
+        ZabbixScheduler zabbixScheduler = new ZabbixScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
+        ObserviumScheduler observiumScheduler = new ObserviumScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
+        ObserviumHostsScheduler observiumHostsScheduler = new ObserviumHostsScheduler(
+                integrationServiceRegistry,
+                sourceAvailabilityService
+        );
+        ZkBioScheduler zkBioScheduler = new ZkBioScheduler(
+                zkBioIntegrationService,
+                sourceAvailabilityService,
+                snapshotPublicationService
+        );
+
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.ZABBIX.name(), 60000L)).thenReturn(false);
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.OBSERVIUM.name(), 60000L)).thenReturn(false);
+        when(sourceAvailabilityService.shouldAttempt(MonitoringSourceType.ZKBIO.name(), 60000L)).thenReturn(false);
+
+        zabbixScheduler.fetchAndPublishProblems();
+        zabbixScheduler.fetchAndPublishMetrics();
+        observiumScheduler.refreshProblemsAndMetrics();
+        observiumHostsScheduler.refreshHosts();
+        zkBioScheduler.refreshProblemsAndMetrics();
+        zkBioScheduler.refreshAttendanceDevicesAndStatus();
+
+        verifyNoInteractions(integrationServiceRegistry);
+        verifyNoInteractions(zkBioIntegrationService);
+        verifyNoInteractions(snapshotPublicationService);
     }
 
     @Test
@@ -199,31 +261,105 @@ class MonitoringRuntimeIsolationTest {
                 monitoringAggregationService,
                 sourceAvailabilityService,
                 integrationServiceRegistry,
-                zkBioIntegrationService,
+                zkBioRefreshOrchestrationService,
                 snapshotPublicationService
         );
 
         when(integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)).thenReturn(concreteZabbixIntegrationService);
         when(integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)).thenReturn(concreteObserviumIntegrationService);
-        when(integrationServiceRegistry.getRequired(MonitoringSourceType.ZKBIO)).thenReturn(zkBioIntegrationService);
         when(integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA)).thenReturn(cameraIntegrationService);
+        when(concreteZabbixIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(concreteObserviumIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync()).thenReturn(Mono.empty());
+        when(cameraIntegrationService.refreshAsync()).thenReturn(Mono.empty());
 
-        ResponseEntity<ApiResponse<Void>> response = controller.collectAll();
+        ResponseEntity<ApiResponse<Void>> response = controller.collectAll().block();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().isSuccess()).isTrue();
         assertThat(response.getBody().getMessage()).isEqualTo("ALL SERVICES COLLECTED");
-        verify(concreteZabbixIntegrationService).refresh();
-        verify(concreteObserviumIntegrationService).refresh();
-        verify(zkBioIntegrationService).refresh();
-        verify(zkBioIntegrationService).refreshAttendance();
-        verify(cameraIntegrationService).refresh();
+        verify(concreteZabbixIntegrationService).refreshAsync();
+        verify(concreteObserviumIntegrationService).refreshAsync();
+        verify(zkBioRefreshOrchestrationService).refreshMonitoringAndAttendanceAsync();
+        verify(cameraIntegrationService).refreshAsync();
         verify(snapshotPublicationService).publishMonitoringSnapshots(List.of(
                 MonitoringSourceType.ZABBIX,
                 MonitoringSourceType.OBSERVIUM,
                 MonitoringSourceType.ZKBIO
         ));
         verify(snapshotPublicationService).publishZkBioSnapshots();
+    }
+
+    @Test
+    void controllerCollectAllPublishesOnlyAfterSequentialZkBioPipelineCompletes() {
+        MonitoringController controller = new MonitoringController(
+                monitoringAggregationService,
+                sourceAvailabilityService,
+                integrationServiceRegistry,
+                zkBioRefreshOrchestrationService,
+                snapshotPublicationService
+        );
+
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)).thenReturn(concreteZabbixIntegrationService);
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)).thenReturn(concreteObserviumIntegrationService);
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA)).thenReturn(cameraIntegrationService);
+        when(concreteZabbixIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(concreteObserviumIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(cameraIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync()).thenReturn(Mono.empty());
+
+        controller.collectAll().block();
+
+        InOrder inOrder = inOrder(
+                concreteZabbixIntegrationService,
+                concreteObserviumIntegrationService,
+                zkBioRefreshOrchestrationService,
+                cameraIntegrationService,
+                snapshotPublicationService
+        );
+        inOrder.verify(concreteZabbixIntegrationService).refreshAsync();
+        inOrder.verify(concreteObserviumIntegrationService).refreshAsync();
+        inOrder.verify(zkBioRefreshOrchestrationService).refreshMonitoringAndAttendanceAsync();
+        inOrder.verify(cameraIntegrationService).refreshAsync();
+        inOrder.verify(snapshotPublicationService).publishMonitoringSnapshots(List.of(
+                MonitoringSourceType.ZABBIX,
+                MonitoringSourceType.OBSERVIUM,
+                MonitoringSourceType.ZKBIO
+        ));
+        inOrder.verify(snapshotPublicationService).publishZkBioSnapshots();
+    }
+
+    @Test
+    void startupPublishesZkBioOnlyAfterOrchestrationPipelineCompletes() {
+        MonitoringStartup startup = new MonitoringStartup(
+                integrationServiceRegistry,
+                zkBioRefreshOrchestrationService,
+                snapshotPublicationService
+        );
+        Sinks.Empty<Void> zkbioSink = Sinks.empty();
+
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)).thenReturn(zabbixIntegrationService);
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)).thenReturn(observiumIntegrationService);
+        when(integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA)).thenReturn(cameraIntegrationService);
+        when(zabbixIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(observiumIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(cameraIntegrationService.refreshAsync()).thenReturn(Mono.empty());
+        when(zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync()).thenReturn(zkbioSink.asMono());
+
+        startup.warmupInitialSnapshots();
+
+        verifyNoInteractions(snapshotPublicationService);
+
+        zkbioSink.tryEmitEmpty();
+
+        InOrder inOrder = inOrder(zkBioRefreshOrchestrationService, snapshotPublicationService);
+        inOrder.verify(zkBioRefreshOrchestrationService).refreshMonitoringAndAttendanceAsync();
+        inOrder.verify(snapshotPublicationService).publishMonitoringSnapshots(List.of(
+                MonitoringSourceType.ZABBIX,
+                MonitoringSourceType.OBSERVIUM,
+                MonitoringSourceType.ZKBIO
+        ));
+        inOrder.verify(snapshotPublicationService).publishZkBioSnapshots();
     }
 }
