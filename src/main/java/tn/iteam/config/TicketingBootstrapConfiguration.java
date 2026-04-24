@@ -1,6 +1,7 @@
 package tn.iteam.config;
 
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tn.iteam.domain.Role;
@@ -13,6 +14,11 @@ import tn.iteam.repository.UserRepository;
 import java.util.List;
 
 @Configuration
+@ConditionalOnProperty(
+        name = "app.bootstrap.ticketing.enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class TicketingBootstrapConfiguration {
 
     @Bean
