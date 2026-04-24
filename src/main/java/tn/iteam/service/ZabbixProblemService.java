@@ -9,8 +9,6 @@ public interface ZabbixProblemService {
 
     List<ZabbixProblemDTO> getPersistedFilteredActiveProblems();
 
-    List<ZabbixProblemDTO> synchronizeAndGetPersistedFilteredActiveProblems();
-
     List<ZabbixProblemDTO> synchronizeActiveProblemsFromZabbix();
 
     List<ZabbixProblemDTO> synchronizeActiveProblemsFromZabbix(JsonNode hosts);

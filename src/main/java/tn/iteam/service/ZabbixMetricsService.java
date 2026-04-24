@@ -10,8 +10,6 @@ public interface ZabbixMetricsService {
 
     List<ZabbixMetric> getPersistedMetricsSnapshot();
 
-    Mono<List<ZabbixMetric>> synchronizeAndGetPersistedMetricsSnapshot();
-
     Mono<List<ZabbixMetric>> fetchAndSaveMetrics();
 
     Mono<List<ZabbixMetric>> fetchAndSaveMetrics(JsonNode hosts);

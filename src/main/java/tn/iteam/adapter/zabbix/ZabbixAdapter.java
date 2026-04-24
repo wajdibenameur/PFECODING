@@ -13,8 +13,8 @@ import tn.iteam.domain.MonitoredHost;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.dto.ZabbixMetricDTO;
 import tn.iteam.dto.ZabbixProblemDTO;
-import tn.iteam.exception.IntegrationTimeoutException;
 import tn.iteam.service.ZabbixSyncService;
+import tn.iteam.util.IntegrationClientSupport;
 import tn.iteam.util.MonitoringConstants;
 
 import java.time.Instant;
@@ -520,11 +520,11 @@ public class ZabbixAdapter {
                             : new RuntimeException(exception);
                     lastBatchException.set(runtimeException);
 
-                    if (containsInterruptedException(exception)) {
+                    if (IntegrationClientSupport.containsInterruptedException(exception)) {
                         log.warn(LOG_PREFIX + "Metrics collection interrupted, stopping remaining batches", exception);
                         return Mono.error(runtimeException);
                     }
-                    if (isTimeoutException(exception)) {
+                    if (IntegrationClientSupport.isTimeoutException(exception)) {
                         log.warn(TIMED_OUT_ITEMS_BATCH_LOG_TEMPLATE, hostBatch, durationMs, exception);
                     } else {
                         log.error(FAILED_ITEMS_BATCH_LOG_TEMPLATE, hostBatch, durationMs, exception);
@@ -572,7 +572,7 @@ public class ZabbixAdapter {
                                 hostMap
                         ))
                         .onErrorResume(exception -> {
-                            if (containsInterruptedException(exception)) {
+                            if (IntegrationClientSupport.containsInterruptedException(exception)) {
                                 log.warn(LOG_PREFIX + interruptionLogMessage, exception);
                                 return Mono.error(exception);
                             }
@@ -754,34 +754,6 @@ public class ZabbixAdapter {
             }
             throw ex;
         }
-    }
-
-    private boolean isTimeoutException(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof IntegrationTimeoutException) {
-                return true;
-            }
-            if ("io.netty.handler.timeout.ReadTimeoutException".equals(current.getClass().getName())) {
-                return true;
-            }
-            if ("io.netty.channel.ConnectTimeoutException".equals(current.getClass().getName())) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
-    private boolean containsInterruptedException(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof InterruptedException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private List<List<String>> chunkList(List<String> items, int size) {
