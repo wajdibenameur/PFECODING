@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.stereotype.Component;
 import tn.iteam.integration.IntegrationServiceRegistry;
-import tn.iteam.integration.ZkBioIntegrationOperations;
+import tn.iteam.integration.ZkBioRefreshOrchestrationService;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.service.support.MonitoringSnapshotPublicationService;
 
@@ -26,16 +26,16 @@ public class MonitoringStartup {
     private final AtomicBoolean warmupStarted = new AtomicBoolean(false);
 
     private final IntegrationServiceRegistry integrationServiceRegistry;
-    private final ZkBioIntegrationOperations zkBioIntegrationOperations;
+    private final ZkBioRefreshOrchestrationService zkBioRefreshOrchestrationService;
     private final MonitoringSnapshotPublicationService snapshotPublicationService;
 
     public MonitoringStartup(
             IntegrationServiceRegistry integrationServiceRegistry,
-            ZkBioIntegrationOperations zkBioIntegrationOperations,
+            ZkBioRefreshOrchestrationService zkBioRefreshOrchestrationService,
             MonitoringSnapshotPublicationService snapshotPublicationService
     ) {
         this.integrationServiceRegistry = integrationServiceRegistry;
-        this.zkBioIntegrationOperations = zkBioIntegrationOperations;
+        this.zkBioRefreshOrchestrationService = zkBioRefreshOrchestrationService;
         this.snapshotPublicationService = snapshotPublicationService;
     }
 
@@ -49,28 +49,40 @@ public class MonitoringStartup {
 
         log.info("Application is ready; starting monitoring warmup in the background.");
 
-        refreshSafely("Zabbix", integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)
-                .refreshAsync()
-                .doOnSuccess(unused -> snapshotPublicationService.publishMonitoringSnapshots(MonitoringSourceType.ZABBIX)));
-        refreshSafely("Observium", integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)
-                .refreshAsync()
-                .doOnSuccess(unused -> snapshotPublicationService.publishMonitoringSnapshots(MonitoringSourceType.OBSERVIUM)));
-        refreshSafely("ZKBio", zkBioIntegrationOperations.refreshAsync()
-                .then(zkBioIntegrationOperations.refreshAttendanceAsync())
-                .doOnSuccess(unused -> {
-                    snapshotPublicationService.publishMonitoringSnapshots(MonitoringSourceType.ZKBIO);
-                    snapshotPublicationService.publishZkBioSnapshots();
-                }));
-        refreshSafely("Camera", integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA).refreshAsync());
-
-        log.info("Monitoring warmup completed.");
+        refreshSafely("monitoring warmup", reactor.core.publisher.Mono.whenDelayError(
+                integrationServiceRegistry.getRequired(MonitoringSourceType.ZABBIX)
+                        .refreshAsync(),
+                integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM)
+                        .refreshAsync(),
+                zkBioRefreshOrchestrationService.refreshMonitoringAndAttendanceAsync(),
+                integrationServiceRegistry.getRequired(MonitoringSourceType.CAMERA).refreshAsync()
+        ).then(reactor.core.publisher.Mono.fromRunnable(() -> {
+            snapshotPublicationService.publishMonitoringSnapshots(java.util.List.of(
+                    MonitoringSourceType.ZABBIX,
+                    MonitoringSourceType.OBSERVIUM,
+                    MonitoringSourceType.ZKBIO
+            ));
+            snapshotPublicationService.publishZkBioSnapshots();
+            log.info("Monitoring warmup completed.");
+        })));
     }
 
     private void refreshSafely(String source, reactor.core.publisher.Mono<Void> action) {
         action.subscribe(
                 unused -> {
                 },
-                throwable -> log.warn("Startup refresh for {} failed: {}", source, throwable.getMessage())
+                throwable -> log.warn(
+                        "Startup refresh for {} failed but application remains available: {}",
+                        source,
+                        safeMessage(throwable)
+                )
         );
+    }
+
+    private String safeMessage(Throwable throwable) {
+        if (throwable == null || throwable.getMessage() == null || throwable.getMessage().isBlank()) {
+            return "unknown cause";
+        }
+        return throwable.getMessage();
     }
 }

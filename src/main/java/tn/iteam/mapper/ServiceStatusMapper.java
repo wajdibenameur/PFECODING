@@ -41,16 +41,4 @@ public class ServiceStatusMapper {
         entity.setLastCheck(LocalDateTime.now());
     }
 
-    public ServiceStatusDTO toDTO(ServiceStatus entity) {
-        ServiceStatusDTO dto = new ServiceStatusDTO();
-        dto.setSource(entity.getSource());
-        dto.setName(entity.getName());
-        dto.setIp(entity.getIp());
-        dto.setPort(entity.getPort());
-        dto.setProtocol(entity.getProtocol());
-        dto.setStatus(entity.getStatus());
-        dto.setCategory(entity.getCategory());
-        dto.setLastCheck(entity.getLastCheck());
-        return dto;
-    }
 }
