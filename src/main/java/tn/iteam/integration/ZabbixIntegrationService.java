@@ -157,7 +157,7 @@ public class ZabbixIntegrationService implements AsyncIntegrationService {
         if (existingSnapshot != null) {
             saveFallbackSnapshot(dataset, source, existingSnapshot);
             availabilityService.markDegraded(source, safeMessage(exception));
-            log.warn("Failed to refresh {} for {}. Keeping last snapshot: {}", dataset, source, safeMessage(exception));
+            log.warn("Failed to refresh {} for {}. Serving snapshot_fallback from the last in-memory snapshot: {}", dataset, source, safeMessage(exception));
             return;
         }
 
@@ -166,7 +166,7 @@ public class ZabbixIntegrationService implements AsyncIntegrationService {
             saveFallbackSnapshot(dataset, source, persistedFallback);
             availabilityService.markDegraded(source, safeMessage(exception));
             log.warn(
-                    "Failed to refresh {} for {}. Rebuilt snapshot from persisted data ({} entries): {}",
+                    "Failed to refresh {} for {}. Serving snapshot_fallback rebuilt from persisted data ({} entries): {}",
                     dataset,
                     source,
                     persistedFallback.size(),
@@ -177,7 +177,7 @@ public class ZabbixIntegrationService implements AsyncIntegrationService {
 
         saveFallbackSnapshot(dataset, source, List.of());
         availabilityService.markUnavailable(source, safeMessage(exception));
-        log.warn("Failed to refresh {} for {}. Serving empty snapshot fallback: {}", dataset, source, safeMessage(exception));
+        log.warn("Failed to refresh {} for {}. Serving snapshot_fallback with empty data: {}", dataset, source, safeMessage(exception));
     }
 
     private List<?> loadPersistedFallback(String dataset) {

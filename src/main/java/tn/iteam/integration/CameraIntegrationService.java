@@ -127,12 +127,12 @@ public class CameraIntegrationService implements AsyncIntegrationService {
         List<?> existingSnapshot = safeGetExistingSnapshot(source).orElse(null);
         if (existingSnapshot != null) {
             saveFallbackSnapshot(source, existingSnapshot);
-            log.warn("Failed to refresh camera hosts. Keeping last snapshot: {}", safeMessage(exception));
+            log.warn("Failed to refresh camera hosts. Serving snapshot_fallback from the last in-memory snapshot: {}", safeMessage(exception));
             return;
         }
 
         saveFallbackSnapshot(source, List.of());
-        log.warn("Failed to refresh camera hosts. Serving empty snapshot fallback: {}", safeMessage(exception));
+        log.warn("Failed to refresh camera hosts. Serving snapshot_fallback with empty data: {}", safeMessage(exception));
     }
 
     private Optional<List<?>> safeGetExistingSnapshot(String source) {

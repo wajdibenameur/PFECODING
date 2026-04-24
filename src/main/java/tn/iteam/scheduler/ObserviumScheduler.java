@@ -2,11 +2,13 @@ package tn.iteam.scheduler;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import tn.iteam.integration.IntegrationServiceRegistry;
 import tn.iteam.monitoring.MonitoringSourceType;
+import tn.iteam.service.SourceAvailabilityService;
 import tn.iteam.service.support.MonitoringSnapshotPublicationService;
 
 /**
@@ -21,20 +23,31 @@ import tn.iteam.service.support.MonitoringSnapshotPublicationService;
 public class ObserviumScheduler {
 
     private final IntegrationServiceRegistry integrationServiceRegistry;
+    private final SourceAvailabilityService sourceAvailabilityService;
     private final MonitoringSnapshotPublicationService snapshotPublicationService;
+
+    @Value("${observium.scheduler.retry-backoff-ms:60000}")
+    private long retryBackoffMs = 60000L;
 
     @Scheduled(
             fixedRateString = "${observium.scheduler.problems.rate:60000}",
             initialDelayString = "${observium.scheduler.problems.initial-delay:45000}"
     )
     public void refreshProblemsAndMetrics() {
+        if (!sourceAvailabilityService.shouldAttempt(MonitoringSourceType.OBSERVIUM.name(), retryBackoffMs)) {
+            log.debug("Skipping Observium scheduler refresh because retry cooldown is active.");
+            return;
+        }
         integrationServiceRegistry.getRequired(MonitoringSourceType.OBSERVIUM).refreshAsync()
                 .then(Mono.fromRunnable(() ->
                         snapshotPublicationService.publishMonitoringSnapshots(MonitoringSourceType.OBSERVIUM)))
                 .subscribe(
                         unused -> {
                         },
-                        throwable -> log.warn("Observium scheduler failed but application remains available: {}", throwable.getMessage())
+                        throwable -> log.warn(
+                                "Observium scheduler failed but application remains available: {}",
+                                throwable != null && throwable.getMessage() != null ? throwable.getMessage() : "unknown cause"
+                        )
                 );
     }
 }
