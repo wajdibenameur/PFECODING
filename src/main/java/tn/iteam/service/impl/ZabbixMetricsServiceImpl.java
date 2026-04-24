@@ -42,9 +42,9 @@ public class ZabbixMetricsServiceImpl implements ZabbixMetricsService {
     private static final String MAPPED_METRICS_LOG_TEMPLATE = "Mapped {} metrics, skipped {} invalid rows";
     private static final String PERSISTED_METRICS_LOG_TEMPLATE = "Persisted {} rows into zabbix_metric";
     private static final String METRICS_REFRESH_ALREADY_RUNNING_MESSAGE =
-            "Zabbix metrics refresh already running, reusing persisted snapshot";
+            "Zabbix heavy metrics refresh already running, skipping overlapping retrieval and reusing persisted snapshot";
     private static final String SKIPPED_CONCURRENT_REFRESH_LOG_TEMPLATE =
-            "Skipped concurrent metrics refresh for {}";
+            "Skipped overlapping heavy metrics refresh for {}";
     private static final String REUSING_PERSISTED_METRICS_MESSAGE =
             "No live Zabbix metrics collected, reusing persisted snapshot";
 
@@ -60,25 +60,6 @@ public class ZabbixMetricsServiceImpl implements ZabbixMetricsService {
     @Override
     public List<ZabbixMetric> getPersistedMetricsSnapshot() {
         return repository.findAll();
-    }
-
-    @Override
-    public Mono<List<ZabbixMetric>> synchronizeAndGetPersistedMetricsSnapshot() {
-        return fetchAndSaveMetrics()
-                .flatMap(synced -> Mono.fromCallable(this::getPersistedMetricsSnapshot)
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .map(persisted -> {
-                            if (synced.isEmpty()
-                                    && !persisted.isEmpty()
-                                    && !availabilityService.isAvailable(MonitoringConstants.SOURCE_ZABBIX)) {
-                                availabilityService.markDegraded(
-                                        MonitoringConstants.SOURCE_ZABBIX,
-                                        "Live Zabbix metrics unavailable, using last persisted snapshot"
-                                );
-                                log.warn("Zabbix unavailable, using last persisted metrics snapshot ({} metrics)", persisted.size());
-                            }
-                            return persisted;
-                        }));
     }
 
     @Override
@@ -106,13 +87,15 @@ public class ZabbixMetricsServiceImpl implements ZabbixMetricsService {
                             ex.getMessage() != null ? ex.getMessage() : UNEXPECTED_ERROR_MESSAGE
                     );
                     if (ex instanceof IntegrationException integrationException) {
-                        log.warn(SYNCHRONIZATION_FAILED_TEMPLATE,
+                        log.warn(
+                                SYNCHRONIZATION_FAILED_TEMPLATE,
                                 MonitoringConstants.SOURCE_LABEL_ZABBIX,
-                                integrationException.getMessage());
+                                integrationException.getMessage()
+                        );
                     } else {
                         log.error("{} [{}]", UNEXPECTED_ERROR_MESSAGE, MonitoringConstants.SOURCE_LABEL_ZABBIX, ex);
                     }
-                    return Mono.error(ex);
+                    return Mono.<List<ZabbixMetric>>error(ex);
                 })
                 .doFinally(signalType -> metricsRefreshInProgress.set(false));
     }

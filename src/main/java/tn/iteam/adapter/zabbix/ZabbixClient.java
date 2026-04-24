@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientException;
 import reactor.core.publisher.Mono;
 import tn.iteam.exception.IntegrationResponseException;
 import tn.iteam.exception.IntegrationTimeoutException;
@@ -23,7 +22,6 @@ import tn.iteam.util.IntegrationClientSupport;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.TimeoutException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +32,8 @@ public class ZabbixClient {
     private static final Logger log = LoggerFactory.getLogger(ZabbixClient.class);
     private static final String SOURCE = "ZABBIX";
     private static final String SOURCE_LABEL = "Zabbix";
-    private static final String RESILIENCE_NAME = "zabbixApi";
+    private static final String LIGHT_RESILIENCE_NAME = "zabbixApiLight";
+    private static final String HEAVY_RESILIENCE_NAME = "zabbixApiHeavy";
     private static final String LOG_PREFIX = "[ZABBIX] ";
     private static final String JSON_RPC = "jsonrpc";
     private static final String JSON_RPC_VERSION = "2.0";
@@ -134,7 +133,7 @@ public class ZabbixClient {
     private static final String CONTEXT_LAST_ITEM_VALUE = "last item value";
     private static final String CONTEXT_VERSION_API = "version API";
     private static final String METHOD_HISTORY_GET = "history.get";
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration DEFAULT_LIGHT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private final WebClient webClient;
     private final WebClient zabbixMetricsWebClient;
     private final ObjectMapper objectMapper;
@@ -148,6 +147,12 @@ public class ZabbixClient {
 
     @Value("${zabbix.usertoken}")
     private String apiToken;
+
+    @Value("${zabbix.api.light.request-timeout-ms:60000}")
+    private long lightRequestTimeoutMs;
+
+    @Value("${zabbix.api.heavy.request-timeout-ms:1500000}")
+    private long heavyRequestTimeoutMs;
 
     public ZabbixClient(
             WebClient webClient,
@@ -190,7 +195,7 @@ public class ZabbixClient {
     }
 
     private Mono<JsonNode> executeRequestLive(Map<String, Object> payload, String context) {
-        return executeRequestLive(webClient, payload, context, REQUEST_TIMEOUT);
+        return executeRequestLive(webClient, payload, context, lightRequestTimeout());
     }
 
     private Mono<JsonNode> executeRequestLive(WebClient client, Map<String, Object> payload, String context, Duration timeout) {
@@ -244,8 +249,8 @@ public class ZabbixClient {
                 .onErrorMap(ex -> mapRequestException(ex, context));
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getHostsFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getHostsFallback")
     public Mono<JsonNode> getHosts() {
         log.info(LOG_PREFIX + "getHosts() called");
 
@@ -258,8 +263,8 @@ public class ZabbixClient {
         return executeRequestLive(payload,CONTEXT_HOSTS);
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getHostByIdFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getHostByIdFallback")
     public Mono<JsonNode> getHostById(String hostId) {
         log.info(LOG_PREFIX + "getHostById() called with hostId={}", hostId);
 
@@ -273,8 +278,8 @@ public class ZabbixClient {
         return executeRequestLive(payload,CONTEXT_HOST_BY_ID);
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getRecentProblemsFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getRecentProblemsFallback")
     public Mono<JsonNode> getRecentProblems() {
         log.info(LOG_PREFIX + "getRecentProblems() called");
 
@@ -294,8 +299,8 @@ public class ZabbixClient {
     }
 
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getRecentProblemsByHostFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getRecentProblemsByHostFallback")
     public Mono<JsonNode> getRecentProblemsByHost(String hostId) {
         log.info(LOG_PREFIX + "getRecentProblemsByHost() called with hostId={}", hostId);
 
@@ -314,8 +319,8 @@ public class ZabbixClient {
 
         return executeRequestLive(payload, CONTEXT_RECENT_PROBLEMS_BY_HOST);
     }
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getTriggerByIdFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getTriggerByIdFallback")
     public Mono<JsonNode> getTriggerById(String triggerId) {
         log.info(LOG_PREFIX + "getTriggerById() called with triggerId={}", triggerId);
 
@@ -331,8 +336,8 @@ public class ZabbixClient {
         return executeRequestLive(payload,CONTEXT_TRIGGER_BY_ID);
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getTriggersByIdsFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getTriggersByIdsFallback")
     public Mono<JsonNode> getTriggersByIds(List<String> triggerIds) {
         log.info(LOG_PREFIX + "getTriggersByIds() called with triggerIds count={}", triggerIds != null ? triggerIds.size() : 0);
 
@@ -348,8 +353,8 @@ public class ZabbixClient {
         return executeRequestLive(payload, CONTEXT_TRIGGERS_BY_IDS);
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getTriggersByHostFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getTriggersByHostFallback")
     public Mono<JsonNode> getTriggersByHost(String hostId) {
         log.info(LOG_PREFIX + "getTriggersByHost() called with hostId={}", hostId);
 
@@ -365,11 +370,11 @@ public class ZabbixClient {
         return executeRequestLive(payload, CONTEXT_TRIGGERS_BY_HOST);
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getVersionFallback")
+    @Retry(name = LIGHT_RESILIENCE_NAME)
+    @CircuitBreaker(name = LIGHT_RESILIENCE_NAME, fallbackMethod = "getVersionFallback")
     public Mono<String> getVersion() {
         Map<String, Object> payload = createBasePayload("apiinfo.version");
-        return callPost(webClient, zabbixUrl, payload, createJsonHeaders(), REQUEST_TIMEOUT)
+        return callPost(webClient, zabbixUrl, payload, createJsonHeaders(), lightRequestTimeout())
                 .flatMap(responseBody -> {
                     if (responseBody == null) {
                         return Mono.error(new IntegrationResponseException(SOURCE, EMPTY_RESPONSE_TEMPLATE.formatted(VERSION_API_TARGET)));
@@ -394,8 +399,8 @@ public class ZabbixClient {
                 .onErrorMap(ex -> mapVersionException(ex));
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getItemsByHostFallback")
+    @Retry(name = HEAVY_RESILIENCE_NAME)
+    @CircuitBreaker(name = HEAVY_RESILIENCE_NAME, fallbackMethod = "getItemsByHostFallback")
     public Mono<JsonNode> getItemsByHost(String hostId) {
         log.info(LOG_PREFIX + "getItemsByHost() called with hostId={}", hostId);
 
@@ -406,10 +411,10 @@ public class ZabbixClient {
         params.put(FILTER, ACTIVE_STATUS_FILTER);
         payload.put(PARAMS, params);
 
-        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_ITEMS_BY_HOST, REQUEST_TIMEOUT);
+        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_ITEMS_BY_HOST, heavyRequestTimeout());
     }
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getItemsByHostsFallback")
+    @Retry(name = HEAVY_RESILIENCE_NAME)
+    @CircuitBreaker(name = HEAVY_RESILIENCE_NAME, fallbackMethod = "getItemsByHostsFallback")
     public Mono<JsonNode> getItemsByHosts(List<String> hostIds) {
         log.info(LOG_PREFIX + "getItemsByHosts() called with hostIds count={}", hostIds != null ? hostIds.size() : 0);
 
@@ -420,11 +425,11 @@ public class ZabbixClient {
         params.put(FILTER, ACTIVE_STATUS_FILTER);
         payload.put(PARAMS, params);
 
-        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_ITEMS_BY_HOSTS, REQUEST_TIMEOUT);
+        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_ITEMS_BY_HOSTS, heavyRequestTimeout());
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getItemHistoryFallback")
+    @Retry(name = HEAVY_RESILIENCE_NAME)
+    @CircuitBreaker(name = HEAVY_RESILIENCE_NAME, fallbackMethod = "getItemHistoryFallback")
     public Mono<JsonNode> getItemHistory(String itemId, int valueType, long from, long to) {
         log.info(LOG_PREFIX + "getItemHistory() called with itemId={}, valueType={}, from={}, to={}",
                 itemId, valueType, from, to);
@@ -440,11 +445,11 @@ public class ZabbixClient {
         params.put(SORT_ORDER, ASC);
         payload.put(PARAMS, params);
 
-        return executeRequestLive(payload, CONTEXT_HISTORY);
+        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_HISTORY, heavyRequestTimeout());
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getHistoryBatchFallback")
+    @Retry(name = HEAVY_RESILIENCE_NAME)
+    @CircuitBreaker(name = HEAVY_RESILIENCE_NAME, fallbackMethod = "getHistoryBatchFallback")
     public Mono<JsonNode> getHistoryBatch(List<String> itemIds, int valueType, long from, long to) {
         log.info(LOG_PREFIX + "getHistoryBatch() called with itemIds count={}, valueType={}, from={}, to={}",
                 itemIds != null ? itemIds.size() : 0, valueType, from, to);
@@ -458,11 +463,11 @@ public class ZabbixClient {
         params.put(OUTPUT, EXTEND);
         payload.put(PARAMS, params);
 
-        return executeRequestLive(payload,CONTEXT_HISTORY_BATCH);
+        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_HISTORY_BATCH, heavyRequestTimeout());
     }
 
-    @Retry(name = RESILIENCE_NAME)
-    @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getLastItemValueFallback")
+    @Retry(name = HEAVY_RESILIENCE_NAME)
+    @CircuitBreaker(name = HEAVY_RESILIENCE_NAME, fallbackMethod = "getLastItemValueFallback")
     public Mono<JsonNode> getLastItemValue(String itemId, int valueType) {
         long now = Instant.now().getEpochSecond();
         long oneHourAgo = now - 3600;
@@ -479,7 +484,7 @@ public class ZabbixClient {
         params.put(LIMIT, 1);
         payload.put(PARAMS, params);
 
-        return executeRequestLive(payload, CONTEXT_LAST_ITEM_VALUE);
+        return executeRequestLive(zabbixMetricsWebClient, payload, CONTEXT_LAST_ITEM_VALUE, heavyRequestTimeout());
     }
 
     private HttpHeaders createAuthenticatedHeaders() {
@@ -516,77 +521,28 @@ public class ZabbixClient {
     }
 
     private Throwable mapRequestException(Throwable ex, String context) {
-        if (ex instanceof IntegrationUnavailableException
-                || ex instanceof IntegrationTimeoutException
-                || ex instanceof IntegrationResponseException) {
-            return ex;
-        }
+        return IntegrationClientSupport.mapTransportException(SOURCE, SOURCE_LABEL, context, ex);
+    }
 
-        if (containsInterruptedException(ex)) {
-            Thread.currentThread().interrupt();
-            return new IntegrationUnavailableException(
-                    SOURCE,
-                    "Zabbix request interrupted during " + context,
-                    ex
-            );
-        }
+    private Duration lightRequestTimeout() {
+        return lightRequestTimeoutMs > 0 ? Duration.ofMillis(lightRequestTimeoutMs) : DEFAULT_LIGHT_REQUEST_TIMEOUT;
+    }
 
-        if (isTimeoutException(ex)) {
-            return new IntegrationTimeoutException(
-                    SOURCE,
-                    IntegrationClientSupport.timeoutDuring(SOURCE_LABEL, context),
-                    ex
-            );
-        }
-
-        if (ex instanceof WebClientException) {
-            return new IntegrationUnavailableException(
-                    SOURCE,
-                    "Zabbix unavailable during " + context,
-                    ex
-            );
-        }
-
-        return new IntegrationUnavailableException(
-                SOURCE,
-                "Zabbix unavailable during " + context,
-                ex
-        );
+    private Duration heavyRequestTimeout() {
+        return heavyRequestTimeoutMs > 0 ? Duration.ofMillis(heavyRequestTimeoutMs) : Duration.ofMinutes(25);
     }
 
     private Throwable mapVersionException(Throwable ex) {
-        if (ex instanceof IntegrationUnavailableException
-                || ex instanceof IntegrationTimeoutException
-                || ex instanceof IntegrationResponseException) {
-            return ex;
+        RuntimeException mapped = IntegrationClientSupport.mapTransportException(
+                SOURCE,
+                SOURCE_LABEL,
+                GET_VERSION_CONTEXT,
+                ex
+        );
+        if (mapped instanceof IntegrationUnavailableException && !(ex instanceof org.springframework.web.reactive.function.client.WebClientException)) {
+            return new IntegrationUnavailableException(SOURCE, UNEXPECTED_VERSION_ERROR, ex);
         }
-
-        if (containsInterruptedException(ex)) {
-            Thread.currentThread().interrupt();
-            return new IntegrationUnavailableException(
-                    SOURCE,
-                    "Zabbix request interrupted during " + GET_VERSION_CONTEXT,
-                    ex
-            );
-        }
-
-        if (isTimeoutException(ex)) {
-            return new IntegrationTimeoutException(
-                    SOURCE,
-                    IntegrationClientSupport.timeoutDuring(SOURCE_LABEL, GET_VERSION_CONTEXT),
-                    ex
-            );
-        }
-
-        if (ex instanceof WebClientException) {
-            return new IntegrationUnavailableException(
-                    SOURCE,
-                    "Zabbix unavailable during " + GET_VERSION_CONTEXT,
-                    ex
-            );
-        }
-
-        return new IntegrationUnavailableException(SOURCE, UNEXPECTED_VERSION_ERROR, ex);
+        return mapped;
     }
 
     private String resolveHttpErrorMessage(HttpStatusCode statusCode, String body) {
@@ -618,59 +574,7 @@ public class ZabbixClient {
             return e;
         }
 
-        if (containsInterruptedException(throwable)) {
-            Thread.currentThread().interrupt();
-            return new IntegrationUnavailableException(
-                    SOURCE,
-                    "Zabbix request interrupted during " + apiTarget,
-                    throwable
-            );
-        }
-
-        if (isTimeoutException(throwable)) {
-            return new IntegrationTimeoutException(
-                    SOURCE,
-                    IntegrationClientSupport.timeoutDuring(SOURCE_LABEL, apiTarget),
-                    throwable
-            );
-        }
-
-        return new IntegrationUnavailableException(
-                SOURCE,
-                "Zabbix unavailable during " + apiTarget,
-                throwable
-        );
-    }
-
-    private boolean isTimeoutException(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof TimeoutException) {
-                return true;
-            }
-            if ("io.netty.handler.timeout.ReadTimeoutException".equals(current.getClass().getName())) {
-                return true;
-            }
-            if ("io.netty.channel.ConnectTimeoutException".equals(current.getClass().getName())) {
-                return true;
-            }
-            if (current instanceof WebClientException && current.getMessage() != null
-                    && current.getMessage().toLowerCase().contains("timed out")) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
-    private boolean containsInterruptedException(Throwable t) {
-        while (t != null) {
-            if (t instanceof InterruptedException) {
-                return true;
-            }
-            t = t.getCause();
-        }
-        return false;
+        return IntegrationClientSupport.mapTransportException(SOURCE, SOURCE_LABEL, apiTarget, throwable);
     }
     @SuppressWarnings("unused")
     // Parameter required by Resilience4j fallback signature
