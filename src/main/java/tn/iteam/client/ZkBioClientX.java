@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import tn.iteam.exception.IntegrationResponseException;
 import tn.iteam.exception.IntegrationTimeoutException;
 import tn.iteam.exception.IntegrationUnavailableException;
+import tn.iteam.util.IntegrationClientSupport;
 
 import java.net.URI;
 import java.time.Duration;
@@ -109,7 +110,7 @@ public class ZkBioClientX {
         try {
             return baseUrl == null || baseUrl.isBlank() ? null : URI.create(baseUrl);
         } catch (Exception ex) {
-            log.warn("Invalid ZKBio base URL '{}': {}", baseUrl, ex.getMessage());
+            log.warn("Invalid ZKBio base URL '{}'", baseUrl, ex);
             return null;
         }
     }
@@ -141,7 +142,7 @@ public class ZkBioClientX {
 
     private RuntimeException mapCircuitBreakerException(String apiTarget, Throwable throwable) {
         if (throwable instanceof CallNotPermittedException) {
-            log.warn("ZKBio circuit breaker OPEN on {}: {}", apiTarget, throwable.getMessage());
+            log.warn("ZKBio circuit breaker OPEN on {}", apiTarget);
             return new IntegrationUnavailableException(
                     SOURCE,
                     "Circuit breaker open for " + SOURCE_LABEL + " " + apiTarget,
@@ -189,6 +190,7 @@ public class ZkBioClientX {
                 .bodyToMono(String.class)
                 .timeout(REQUEST_TIMEOUT)
                 .switchIfEmpty(Mono.just(""))
+                .onErrorMap(ex -> mapTransportException(endpoint, ex))
                 .map(this::parseBodyUnchecked)
                 .blockOptional()
                 .orElseGet(() -> objectMapper.createObjectNode());
@@ -213,6 +215,7 @@ public class ZkBioClientX {
                 .bodyToMono(String.class)
                 .timeout(REQUEST_TIMEOUT)
                 .switchIfEmpty(Mono.just(""))
+                .onErrorMap(ex -> mapTransportException(endpoint, ex))
                 .map(this::parseBodyUnchecked)
                 .blockOptional()
                 .orElseGet(() -> objectMapper.createObjectNode());
@@ -236,6 +239,10 @@ public class ZkBioClientX {
         } catch (JsonProcessingException exception) {
             throw new IntegrationResponseException(SOURCE, "Failed to parse ZKBio response", exception);
         }
+    }
+
+    private RuntimeException mapTransportException(String endpoint, Throwable throwable) {
+        return IntegrationClientSupport.mapTransportException(SOURCE, SOURCE_LABEL, endpoint, throwable);
     }
 
     private JsonNode extractListPayload(JsonNode root) {

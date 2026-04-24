@@ -9,6 +9,7 @@ import tn.iteam.client.ZkBioClientX;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.dto.ZkBioAttendanceDTO;
 import tn.iteam.dto.ZkBioProblemDTO;
+import tn.iteam.exception.IntegrationException;
 import tn.iteam.mapper.ZkBioAttendanceMapper;
 
 import java.net.URI;
@@ -44,8 +45,16 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
             dto.setCategory("ACCESS_CONTROL");
             dto.setStatus(status != null && status.has("code") && status.get("code").asInt() == 1 ? "UP" : "DOWN");
             return dto;
-        } catch (Exception e) {
+        } catch (IntegrationException e) {
             log.warn("ZKBio status degraded: {}", e.getMessage());
+ 
+            ServiceStatusDTO dto = new ServiceStatusDTO();
+            dto.setSource("ZKBIO");
+            dto.setName("ZKBio Server");
+            dto.setStatus("DOWN");
+            return dto;
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching ZKBio status", e);
 
             ServiceStatusDTO dto = new ServiceStatusDTO();
             dto.setSource("ZKBIO");
@@ -102,8 +111,10 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
             }
 
             log.info("Fetched {} users from ZKBio", dtos.size());
-        } catch (Exception e) {
+        } catch (IntegrationException e) {
             log.warn("ZKBio users unavailable: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching ZKBio users", e);
         }
 
         return dtos;
@@ -123,8 +134,10 @@ public class ZkBioServiceImpl implements ZkBioServiceInterface {
             }
 
             log.info("Fetched {} attendance logs from ZKBio", dtos.size());
-        } catch (Exception e) {
+        } catch (IntegrationException e) {
             log.warn("ZKBio attendance logs unavailable: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching ZKBio attendance logs", e);
         }
 
         return dtos;
