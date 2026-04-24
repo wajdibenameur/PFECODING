@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientException;
 import reactor.core.publisher.Mono;
 import tn.iteam.domain.ApiResponse;
 import tn.iteam.exception.IntegrationResponseException;
@@ -113,7 +112,7 @@ public class ObserviumClientX {
 
     private RuntimeException mapCircuitBreakerException(String apiTarget, Throwable throwable) {
         if (throwable instanceof CallNotPermittedException) {
-            log.warn("Observium circuit breaker OPEN on {}: {}", apiTarget, throwable.getMessage());
+            log.warn("Observium circuit breaker OPEN on {}", apiTarget);
             return new IntegrationUnavailableException(
                     SOURCE,
                     "Circuit breaker open for Observium " + apiTarget,
@@ -159,6 +158,7 @@ public class ObserviumClientX {
                     .bodyToMono(String.class)
                     .timeout(REQUEST_TIMEOUT)
                     .switchIfEmpty(Mono.just(""))
+                    .onErrorMap(ex -> mapTransportException(endpoint, ex))
                     .blockOptional()
                     .orElse("");
 
@@ -200,19 +200,31 @@ public class ObserviumClientX {
         } catch (IntegrationUnavailableException ex) {
             log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, endpoint, ex.getMessage());
             throw ex;
-        } catch (WebClientException ex) {
+        } catch (IntegrationTimeoutException ex) {
             log.warn(TIMEOUT_LOG_TEMPLATE, endpoint, ex.getMessage());
-            throw new IntegrationTimeoutException(SOURCE, IntegrationClientSupport.timeout(SOURCE_LABEL, endpoint), ex);
+            throw ex;
         } catch (IntegrationResponseException ex) {
             throw ex;
         } catch (JsonProcessingException ex) {
-            log.warn(INVALID_JSON_LOG_TEMPLATE, endpoint, ex.getOriginalMessage());
+            log.warn(INVALID_JSON_LOG_TEMPLATE, endpoint, ex.getOriginalMessage(), ex);
             throw new IntegrationResponseException(
                     SOURCE,
                     IntegrationClientSupport.invalidJsonResponse(SOURCE_LABEL, endpoint),
                     ex
             );
+        } catch (RuntimeException ex) {
+            RuntimeException mapped = mapTransportException(endpoint, ex);
+            if (mapped instanceof IntegrationUnavailableException || mapped instanceof IntegrationTimeoutException) {
+                log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, endpoint, mapped.getMessage());
+            } else {
+                log.warn(TRANSPORT_ERROR_LOG_TEMPLATE, endpoint, mapped.getMessage(), mapped);
+            }
+            throw mapped;
         }
+    }
+
+    private RuntimeException mapTransportException(String endpoint, Throwable throwable) {
+        return IntegrationClientSupport.mapTransportException(SOURCE, SOURCE_LABEL, endpoint, throwable);
     }
 
     private String buildApiUrl(String endpoint) {
