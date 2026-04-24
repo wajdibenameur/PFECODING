@@ -8,7 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tn.iteam.integration.IntegrationServiceRegistry;
-import tn.iteam.integration.ZkBioIntegrationOperations;
+import tn.iteam.integration.ZkBioRefreshOrchestrationService;
 import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
@@ -41,7 +41,7 @@ class MonitoringControllerWebMvcTest {
     private IntegrationServiceRegistry integrationServiceRegistry;
 
     @Mock
-    private ZkBioIntegrationOperations zkBioIntegrationService;
+    private ZkBioRefreshOrchestrationService zkBioRefreshOrchestrationService;
 
     @Mock
     private MonitoringSnapshotPublicationService snapshotPublicationService;
@@ -52,7 +52,7 @@ class MonitoringControllerWebMvcTest {
                 aggregationService,
                 sourceAvailabilityService,
                 integrationServiceRegistry,
-                zkBioIntegrationService,
+                zkBioRefreshOrchestrationService,
                 snapshotPublicationService
         );
 
