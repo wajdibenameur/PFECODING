@@ -14,6 +14,10 @@ import {
 } from '../../../shared/ui/collection-control-bar/collection-control-bar.component';
 import { MonitoringApiService } from '../data/monitoring-api.service';
 import { MonitoringRealtimeService } from '../data/monitoring-realtime.service';
+import {
+  findSourceAvailability,
+  matchesMonitoringSource
+} from '../data/monitoring-source.utils';
 
 type ObserviumCategory = 'PRINTER' | 'SERVER' | 'SWITCH' | 'ACCESS_POINT' | 'OTHER';
 type ObserviumCoverage = 'native' | 'synthetic' | 'not_applicable' | 'unknown';
@@ -216,17 +220,15 @@ export class MonitoringObserviumPageComponent {
     }).subscribe({
       next: ({ hostsResponse, problemsResponse, metricsResponse, sourceHealth }) => {
         this.hosts.set(
-          hostsResponse.data.filter((host) => (host.source ?? '').toUpperCase() === 'OBSERVIUM')
+          hostsResponse.data.filter((host) => matchesMonitoringSource(host.source, 'OBSERVIUM'))
         );
         this.problems.set(
-          problemsResponse.data.filter((problem) => (problem.source ?? '').toUpperCase() === 'OBSERVIUM')
+          problemsResponse.data.filter((problem) => matchesMonitoringSource(problem.source, 'OBSERVIUM'))
         );
         this.metrics.set(
-          metricsResponse.data.filter((metric) => (metric.source ?? '').toUpperCase() === 'OBSERVIUM')
+          metricsResponse.data.filter((metric) => matchesMonitoringSource(metric.source, 'OBSERVIUM'))
         );
-        this.sourceAvailability.set(
-          sourceHealth.find((entry) => entry.source.toUpperCase() === 'OBSERVIUM') ?? null
-        );
+        this.sourceAvailability.set(findSourceAvailability(sourceHealth, 'OBSERVIUM'));
         this.hostsFreshness.set(this.readMetadataValue(hostsResponse.freshness));
         this.problemsFreshness.set(this.readMetadataValue(problemsResponse.freshness));
         this.metricsFreshness.set(this.readMetadataValue(metricsResponse.freshness));
@@ -246,13 +248,11 @@ export class MonitoringObserviumPageComponent {
     }
     this.realtimeBound = true;
 
-    this.realtime.monitoringProblems$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (incoming) => {
-        const observiumProblems = incoming.filter(
-          (problem) => (problem.source ?? '').toUpperCase() === 'OBSERVIUM'
-        );
-
-        if (!observiumProblems.length) {
+    this.realtime.monitoringProblemsForSource$('OBSERVIUM')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+      next: (observiumProblems) => {
+        if (observiumProblems.length === 0) {
           return;
         }
 
@@ -267,13 +267,11 @@ export class MonitoringObserviumPageComponent {
       }
     });
 
-    this.realtime.monitoringMetrics$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (incoming) => {
-        const observiumMetrics = incoming.filter(
-          (metric) => (metric.source ?? '').toUpperCase() === 'OBSERVIUM'
-        );
-
-        if (!observiumMetrics.length) {
+    this.realtime.monitoringMetricsForSource$('OBSERVIUM')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+      next: (observiumMetrics) => {
+        if (observiumMetrics.length === 0) {
           return;
         }
 
@@ -288,11 +286,8 @@ export class MonitoringObserviumPageComponent {
       }
     });
 
-    this.realtime.monitoringSources$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.realtime.monitoringSourceHealth$('OBSERVIUM').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (incoming) => {
-        if (incoming.source.toUpperCase() !== 'OBSERVIUM') {
-          return;
-        }
         this.sourceAvailability.set(incoming);
       },
       error: (error) => {
