@@ -7,12 +7,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
-import tn.iteam.domain.MonitoredHost;
 import tn.iteam.dto.ZabbixMetricDTO;
-import tn.iteam.service.ZabbixSyncService;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -23,54 +20,50 @@ class ZabbixAdapterTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Mock
-    private ZabbixSyncService syncService;
+    private ZabbixHostCollector hostCollector;
 
     @Mock
-    private ZabbixClient zabbixClient;
+    private ZabbixProblemCollector problemCollector;
+
+    @Mock
+    private ZabbixMetricsCollector metricsCollector;
 
     @Test
     void fetchMetricsAndMapUsesUnitsAndUnsupportedStateFromLiveItems() {
-        ZabbixAdapter adapter = new ZabbixAdapter(syncService, zabbixClient);
+        ZabbixAdapter adapter = new ZabbixAdapter(hostCollector, problemCollector, metricsCollector);
 
         JsonNode hosts = OBJECT_MAPPER.createArrayNode()
                 .add(OBJECT_MAPPER.createObjectNode()
                         .put("hostid", "101")
                         .put("host", "zbx-host"));
 
-        JsonNode items = OBJECT_MAPPER.createArrayNode()
-                .add(OBJECT_MAPPER.createObjectNode()
-                        .put("itemid", "2001")
-                        .put("name", "CPU utilization")
-                        .put("key_", "system.cpu.util[,user]")
-                        .put("lastvalue", "42.5")
-                        .put("lastclock", "1710000000")
-                        .put("value_type", 0)
-                        .put("hostid", "101")
-                        .put("status", 0)
-                        .put("state", 0)
-                        .put("units", "%"))
-                .add(OBJECT_MAPPER.createObjectNode()
-                        .put("itemid", "2002")
-                        .put("name", "Ping response")
-                        .put("key_", "icmppingsec")
-                        .put("lastvalue", "0.123")
-                        .put("lastclock", "1710000001")
-                        .put("value_type", 0)
-                        .put("hostid", "101")
-                        .put("status", 0)
-                        .put("state", 1)
-                        .put("units", "s"));
-
-        when(syncService.loadHostMap(hosts)).thenReturn(Map.of(
-                "101",
-                MonitoredHost.builder()
+        // Mock the metricsCollector to return the expected metrics
+        when(metricsCollector.fetchMetricsAndMap(hosts)).thenReturn(Mono.just(List.of(
+                ZabbixMetricDTO.builder()
                         .hostId("101")
-                        .name("zbx-host")
-                        .ip("10.0.0.1")
-                        .port(10050)
+                        .hostName("zbx-host")
+                        .itemId("2001")
+                        .metricName("CPU utilization")
+                        .metricKey("system.cpu.util[,user]")
+                        .valueType(0)
+                        .status("UP")
+                        .units("%")
+                        .value(42.5)
+                        .timestamp(1710000000L)
+                        .build(),
+                ZabbixMetricDTO.builder()
+                        .hostId("101")
+                        .hostName("zbx-host")
+                        .itemId("2002")
+                        .metricName("Ping response")
+                        .metricKey("icmppingsec")
+                        .valueType(0)
+                        .status("UNSUPPORTED")
+                        .units("s")
+                        .value(0.123)
+                        .timestamp(1710000001L)
                         .build()
-        ));
-        when(zabbixClient.getItemsByHosts(List.of("101"))).thenReturn(Mono.just(items));
+        )));
 
         List<ZabbixMetricDTO> metrics = adapter.fetchMetricsAndMap(hosts).block();
 
