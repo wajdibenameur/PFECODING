@@ -8,8 +8,8 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -33,7 +33,7 @@ public class ObserviumClientX {
     private static final String RESILIENCE_NAME = "observiumApi";
     private static final String DEVICES_ENDPOINT = "/api/v0/devices";
     private static final String ALERTS_ENDPOINT = "/api/v0/alerts";
-    private static final String X_AUTH_TOKEN = "X-Auth-Token";
+    //private static final String X_AUTH_TOKEN = "X-Auth-Token";
     private static final String DEVICES_SUCCESS_MESSAGE = "Devices fetched successfully";
     private static final String ALERTS_SUCCESS_MESSAGE = "Alerts fetched successfully";
     private static final String EMPTY_RESPONSE_PREFIX = "Empty response from Observium: ";
@@ -55,28 +55,31 @@ public class ObserviumClientX {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final String baseUrl;
-    private final String token;
-
+    //private final String token;
+    private final String username;
+    private final String password;
     public ObserviumClientX(
-            WebClient webClient,
+            @Qualifier("observiumWebClient") WebClient webClient,
             ObjectMapper objectMapper,
             @Value("${observium.url}") String baseUrl,
-            @Value("${observium.token}") String token
+            @Value("${observium.username}") String username,
+            @Value("${observium.password}") String password
     ) {
         this.webClient = webClient;
         this.objectMapper = objectMapper;
         this.baseUrl = baseUrl;
-        this.token = token;
+        this.username = username;
+        this.password = password;
     }
 
-    private HttpHeaders createHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        if (token != null && !token.isBlank()) {
-            headers.set(X_AUTH_TOKEN, token.trim());
-        }
-        return headers;
-    }
+//    private HttpHeaders createHeaders() {
+//        HttpHeaders headers = new HttpHeaders();
+//        headers.setContentType(MediaType.APPLICATION_JSON);
+//        if (token != null && !token.isBlank()) {
+//            headers.set(X_AUTH_TOKEN, token.trim());
+//        }
+//        return headers;
+//    }
 
     @Retry(name = RESILIENCE_NAME)
     @CircuitBreaker(name = RESILIENCE_NAME, fallbackMethod = "getDevicesFallback")
@@ -144,7 +147,7 @@ public class ObserviumClientX {
             String resolvedUrl = buildApiUrl(endpoint);
             String responseBody = webClient.get()
                     .uri(resolvedUrl)
-                    .headers(headers -> headers.addAll(createHeaders()))
+                    .headers(headers -> headers.setBasicAuth(username, password))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, response ->
@@ -226,24 +229,31 @@ public class ObserviumClientX {
     private RuntimeException mapTransportException(String endpoint, Throwable throwable) {
         return IntegrationClientSupport.mapTransportException(SOURCE, SOURCE_LABEL, endpoint, throwable);
     }
+//
+//    private String buildApiUrl(String endpoint) {
+//        String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+//        String normalizedEndpoint = normalizeEndpoint(endpoint);
+//        String resolvedPath = normalizedBaseUrl.endsWith("/api/v0")
+//                ? normalizedBaseUrl + normalizedEndpoint.substring("/api/v0".length())
+//                : normalizedBaseUrl + normalizedEndpoint;
+//
+//        String trimmedToken = token != null ? token.trim() : "";
+//        if (trimmedToken.isBlank()) {
+//            log.warn("Observium token is blank; calling {} without token query parameter", endpoint);
+//            return resolvedPath;
+//        }
+//
+//        String separator = resolvedPath.contains("?") ? "&" : "?";
+//        return resolvedPath + separator + "token=" + trimmedToken;
+//    }
+private String buildApiUrl(String endpoint) {
+    String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    String normalizedEndpoint = normalizeEndpoint(endpoint);
 
-    private String buildApiUrl(String endpoint) {
-        String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-        String normalizedEndpoint = normalizeEndpoint(endpoint);
-        String resolvedPath = normalizedBaseUrl.endsWith("/api/v0")
-                ? normalizedBaseUrl + normalizedEndpoint.substring("/api/v0".length())
-                : normalizedBaseUrl + normalizedEndpoint;
-
-        String trimmedToken = token != null ? token.trim() : "";
-        if (trimmedToken.isBlank()) {
-            log.warn("Observium token is blank; calling {} without token query parameter", endpoint);
-            return resolvedPath;
-        }
-
-        String separator = resolvedPath.contains("?") ? "&" : "?";
-        return resolvedPath + separator + "token=" + trimmedToken;
-    }
-
+    return normalizedBaseUrl.endsWith("/api/v0")
+            ? normalizedBaseUrl + normalizedEndpoint.substring("/api/v0".length())
+            : normalizedBaseUrl + normalizedEndpoint;
+}
     private String normalizeBaseUrl(String rawBaseUrl) {
         String normalized = rawBaseUrl == null ? "" : rawBaseUrl.trim();
         while (normalized.endsWith("/")) {
