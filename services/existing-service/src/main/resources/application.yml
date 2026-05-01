@@ -1,0 +1,52 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: existing-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/pfedb?useSSL=false&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:pfeuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:pfepassword}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Redis (optional — service degrades gracefully when unavailable)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keycloak JWKS endpoint for JWT validation
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/my-realm/protocol/openid-connect/certs}
+          # Optionally also validate issuer
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/my-realm}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  bootstrap:
+    ticketing:
+      enabled: ${BOOTSTRAP_TICKETING_ENABLED:false}
