@@ -30,6 +30,7 @@ public final class MonitoringConstants {
 
     public static final String STATUS_UP = "UP";
     public static final String STATUS_DOWN = "DOWN";
+    public static final String STATUS_DEGRADED = "DEGRADED";
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String STATUS_RESOLVED = "RESOLVED";
 
