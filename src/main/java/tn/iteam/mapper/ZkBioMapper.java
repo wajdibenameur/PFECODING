@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 import tn.iteam.dto.ZkBioProblemDTO;
 import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -39,7 +40,7 @@ public class ZkBioMapper {
                 .active(active)
                 .status(active ? "ACTIVE" : "RESOLVED")
                 .startedAt(startedAt)
-                .startedAtFormatted(formatTimestamp(startedAt))
+                .startedAtFormatted(MonitoringNormalizeUtils.formatTimestamp(startedAt))
                 .resolvedAt(null)
                 .resolvedAtFormatted(null)
                 .source(MonitoringConstants.SOURCE_ZKBIO)
@@ -143,19 +144,5 @@ public class ZkBioMapper {
             return null;
         }
         return value >= EPOCH_MILLIS_THRESHOLD ? value / 1000 : value;
-    }
-
-    private String formatTimestamp(Long epoch) {
-        if (epoch == null) {
-            return null;
-        }
-
-        try {
-            return Instant.ofEpochSecond(epoch)
-                    .atZone(ZoneId.systemDefault())
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 }

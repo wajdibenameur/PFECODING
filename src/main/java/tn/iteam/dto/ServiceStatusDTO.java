@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 public class ServiceStatusDTO {
 
     private String source;
+    private String hostId;
     private String name;
     private String ip;
     private Integer port;

@@ -6,6 +6,7 @@ import tn.iteam.dto.ZabbixProblemDTO;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 /**
  * Mapper for converting Zabbix domain objects to unified monitoring DTOs.
@@ -25,7 +26,7 @@ public class ZabbixMonitoringMapper {
                 .severity(dto.getSeverity())
                 .active(Boolean.TRUE.equals(dto.getActive()))
                 .status(dto.getStatus())
-                .ip(dto.getIp())
+                .ip(MonitoringNormalizeUtils.normalizeIp(dto.getIp()))
                 .port(dto.getPort())
                 .startedAt(dto.getStartedAt())
                 .startedAtFormatted(dto.getStartedAtFormatted())
@@ -51,15 +52,8 @@ public class ZabbixMonitoringMapper {
                 .units(entity.getUnits())
                 .value(entity.getValue())
                 .timestamp(entity.getTimestamp())
-                .ip(entity.getIp())
+                .ip(MonitoringNormalizeUtils.normalizeIp(entity.getIp()))
                 .port(entity.getPort())
                 .build();
-    }
-
-    private String normalizeText(String value) {
-        if (value == null || value.isBlank() || "UNKNOWN".equalsIgnoreCase(value)) {
-            return null;
-        }
-        return value;
     }
 }

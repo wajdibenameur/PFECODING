@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import tn.iteam.dto.ObserviumProblemDTO;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -72,9 +73,9 @@ public class ObserviumMapper {
                 .source(MonitoringConstants.SOURCE_OBSERVIUM)
                 .eventId(alertNode.has(ALERT_ID_FIELD) ? alertNode.get(ALERT_ID_FIELD).asLong() : 0L)
                 .startedAt(startedAt)
-                .startedAtFormatted(formatTimestamp(startedAt))
+                .startedAtFormatted(MonitoringNormalizeUtils.formatTimestamp(startedAt))
                 .resolvedAt(resolvedAt)
-                .resolvedAtFormatted(formatTimestamp(resolvedAt))
+                .resolvedAtFormatted(MonitoringNormalizeUtils.formatTimestamp(resolvedAt))
                 .build();
     }
 
@@ -184,15 +185,6 @@ public class ObserviumMapper {
             return raw / 1000L;
         }
         return raw;
-    }
-
-    private String formatTimestamp(Long epoch) {
-        if (epoch == null) {
-            return null;
-        }
-        return Instant.ofEpochSecond(epoch)
-                .atZone(ZoneId.systemDefault())
-                .format(OUTPUT_FORMATTER);
     }
 
     private String resolveCategory(JsonNode deviceNode) {

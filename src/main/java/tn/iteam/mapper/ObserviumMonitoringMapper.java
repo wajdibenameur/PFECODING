@@ -8,10 +8,10 @@ import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
+import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -22,11 +22,9 @@ import java.util.List;
 @Component
 public class ObserviumMonitoringMapper {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     public UnifiedMonitoringHostDTO toHost(ServiceStatusDTO dto) {
-        String hostName = normalizeText(dto.getName());
-        String ip = normalizeIp(dto.getIp());
+        String hostName = MonitoringNormalizeUtils.normalizeText(dto.getName(), MonitoringConstants.UNKNOWN);
+        String ip = MonitoringNormalizeUtils.normalizeIp(dto.getIp());
         String hostKey = hostName != null ? hostName : (ip != null ? ip : "UNKNOWN");
 
         return UnifiedMonitoringHostDTO.builder()
@@ -37,8 +35,8 @@ public class ObserviumMonitoringMapper {
                 .ip(ip)
                 .port(null)
                 .protocol(null)
-                .status(normalizeText(dto.getStatus()))
-                .category(normalizeText(dto.getCategory()))
+                .status(MonitoringNormalizeUtils.normalizeText(dto.getStatus(), MonitoringConstants.UNKNOWN))
+                .category(MonitoringNormalizeUtils.normalizeText(dto.getCategory(), MonitoringConstants.UNKNOWN))
                 .build();
     }
 
@@ -55,10 +53,10 @@ public class ObserviumMonitoringMapper {
             startedAt = Instant.now().getEpochSecond();
         }
         if (startedAtFormatted == null) {
-            startedAtFormatted = formatTimestamp(startedAt);
+            startedAtFormatted = MonitoringNormalizeUtils.formatTimestamp(startedAt);
         }
         if (resolvedAt != null && resolvedAtFormatted == null) {
-            resolvedAtFormatted = formatTimestamp(resolvedAt);
+            resolvedAtFormatted = MonitoringNormalizeUtils.formatTimestamp(resolvedAt);
         }
 
         return UnifiedMonitoringProblemDTO.builder()
@@ -77,17 +75,6 @@ public class ObserviumMonitoringMapper {
                 .resolvedAt(resolvedAt)
                 .resolvedAtFormatted(resolvedAtFormatted)
                 .build();
-    }
-
-    private String formatTimestamp(Long epoch) {
-        if (epoch == null) return null;
-        try {
-            return Instant.ofEpochSecond(epoch)
-                    .atZone(ZoneId.systemDefault())
-                    .format(DATE_TIME_FORMATTER);
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     public List<UnifiedMonitoringHostDTO> toHosts(List<ServiceStatusDTO> dtos) {
@@ -117,17 +104,4 @@ public class ObserviumMonitoringMapper {
                 .build();
     }
 
-    private String normalizeText(String value) {
-        if (value == null || value.isBlank() || "UNKNOWN".equalsIgnoreCase(value)) {
-            return null;
-        }
-        return value;
-    }
-
-    private String normalizeIp(String value) {
-        if (value == null || value.isBlank() || "IP_UNKNOWN".equalsIgnoreCase(value)) {
-            return null;
-        }
-        return value;
-    }
 }
