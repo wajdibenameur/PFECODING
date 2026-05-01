@@ -23,12 +23,14 @@ class ObserviumClientXFallbackTest {
 
     @Test
     void normalizeObjectCollectionTransformsObjectValuesToArray() {
-        ObserviumClientX observiumClientX = new ObserviumClientX(
+        ObserviumClientX observiumClientX =new ObserviumClientX(
                 mock(WebClient.class),
                 OBJECT_MAPPER,
                 "http://observium.local",
-                "token"
+                "admin",
+                "password"
         );
+
 
         JsonNode objectCollection = OBJECT_MAPPER.createObjectNode()
                 .set("1", OBJECT_MAPPER.createObjectNode().put("device", "sw1"));
@@ -51,7 +53,8 @@ class ObserviumClientXFallbackTest {
                 mock(WebClient.class),
                 OBJECT_MAPPER,
                 "http://observium.local",
-                "token"
+                "admin",
+                "password"
         );
         RuntimeException transportFailure = new RuntimeException(new TimeoutException("read timed out"));
 
@@ -72,7 +75,8 @@ class ObserviumClientXFallbackTest {
                 mock(WebClient.class),
                 OBJECT_MAPPER,
                 "http://observium.local",
-                "token"
+                "admin",
+                "password"
         );
         WebClientRequestException transportFailure = new WebClientRequestException(
                 new RuntimeException("connection refused"),
