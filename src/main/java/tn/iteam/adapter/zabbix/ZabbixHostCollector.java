@@ -39,8 +39,16 @@ public class ZabbixHostCollector {
      * @return list of ServiceStatusDTO
      */
     public List<ServiceStatusDTO> fetchAll() {
-        JsonNode hosts = await(zabbixClient.getHosts());
-        return mapHostsToDto(hosts);
+        return mapHostsToDto(fetchHosts());
+    }
+
+    /**
+     * Fetch raw hosts payload from Zabbix.
+     *
+     * @return JsonNode containing hosts array
+     */
+    public JsonNode fetchHosts() {
+        return await(zabbixClient.getHosts());
     }
 
     /**
@@ -61,6 +69,7 @@ public class ZabbixHostCollector {
         for (JsonNode hostNode : hosts) {
             ServiceStatusDTO dto = new ServiceStatusDTO();
             dto.setSource(MonitoringConstants.SOURCE_ZABBIX);
+            dto.setHostId(hostNode.path(MonitoringConstants.HOST_ID_FIELD).asText(null));
             dto.setName(hostNode.path(MonitoringConstants.HOST_FIELD).asText(MonitoringConstants.UNKNOWN));
             dto.setIp(extractMainIp(hostNode));
             dto.setPort(extractMainPort(hostNode));

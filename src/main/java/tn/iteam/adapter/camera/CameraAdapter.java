@@ -26,8 +26,8 @@ public class CameraAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(CameraAdapter.class);
     private static final String CAMERA_NAME_PREFIX = "Camera-";
-    private static final int CONNECT_TIMEOUT_MS = 150;
-    private static final int MAX_WORKERS = 32;
+    private static final int CONNECT_TIMEOUT_MS = 8000;
+    private static final int MAX_WORKERS = 64;
     private static final String SOURCE = MonitoringConstants.SOURCE_CAMERA;
     private static final String SOURCE_LABEL = "Camera";
 

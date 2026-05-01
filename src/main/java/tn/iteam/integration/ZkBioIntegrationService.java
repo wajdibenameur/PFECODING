@@ -40,8 +40,9 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
     private static final String DATASET_METRICS = "metrics";
     private static final String DATASET_PROBLEMS = "problems";
     private static final String DATASET_STATUS = "status";
-    private static final String FRESHNESS_LIVE = "live";
-    private static final String FRESHNESS_SNAPSHOT = "snapshot_fallback";
+    private static final String FRESHNESS_LIVE = StoredSnapshot.FRESHNESS_LIVE;
+    private static final String FRESHNESS_MEMORY_SNAPSHOT = StoredSnapshot.FRESHNESS_MEMORY_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_SNAPSHOT_MISSING = StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING;
 
     private final ZkBioServiceInterface zkBioService;
     private final tn.iteam.adapter.zkbio.ZkBioAdapter zkBioAdapter;
@@ -71,14 +72,21 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
     public void refreshHosts() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ServiceStatusDTO> statuses = List.copyOf(zkBioAdapter.fetchAll());
-            serviceStatusPersistenceService.saveAll(statuses);
-            monitoredHostPersistenceService.saveAll(source, statuses);
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
             saveSnapshot(
                     DATASET_HOSTS,
                     source,
-                    monitoredHostSnapshotService.loadHosts(getSourceType())
+                    statuses.stream().map(monitoringMapper::toHost).toList()
             );
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped)
+            tryPersistToDatabase(() -> {
+                serviceStatusPersistenceService.saveAll(statuses);
+                monitoredHostPersistenceService.saveAll(source, statuses);
+            });
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_HOSTS, source, exception);
         }
@@ -88,13 +96,18 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
     public void refreshProblems() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ZkBioProblemDTO> problems = List.copyOf(zkBioAdapter.fetchProblems());
-            zkBioPersistenceService.saveProblems(problems);
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
             saveSnapshot(
                     DATASET_PROBLEMS,
                     source,
                     problems.stream().map(monitoringMapper::toProblem).toList()
             );
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped)
+            tryPersistToDatabase(() -> zkBioPersistenceService.saveProblems(problems));
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_PROBLEMS, source, exception);
         }
@@ -114,9 +127,16 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
     public Mono<Void> refreshMetricsAsync() {
         String source = getSourceType().name();
         return Mono.fromCallable(() -> {
+                    // Step 1: Fetch live data
                     List<ZkBioMetricDTO> metrics = List.copyOf(zkBioAdapter.fetchMetrics());
-                    zkBioPersistenceService.saveMetrics(metrics);
-                    return metrics.stream().map(monitoringMapper::toMetric).toList();
+                    
+                    // Step 2: Save snapshot FIRST (always succeeds, in-memory)
+                    List<?> data = metrics.stream().map(monitoringMapper::toMetric).toList();
+                    
+                    // Step 3: Try DB persistence (non-blocking, wrapped)
+                    tryPersistToDatabase(() -> zkBioPersistenceService.saveMetrics(metrics));
+                    
+                    return data;
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnNext(data -> saveSnapshot(DATASET_METRICS, source, data))
@@ -191,31 +211,22 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
     }
 
     private void handleRefreshFailure(String dataset, String source, Exception exception) {
+        // Try in-memory snapshot first (always available)
         Object existingSnapshot = safeGetExistingSnapshot(dataset, source).orElse(null);
         if (existingSnapshot != null) {
             saveFallbackSnapshot(dataset, source, existingSnapshot);
             availabilityService.markDegraded(source, safeMessage(exception));
-            log.warn("Failed to refresh {} for {}. Serving snapshot_fallback from the last in-memory snapshot: {}", dataset, source, safeMessage(exception));
+            log.warn("Failed to refresh {} for {}. Serving snapshot_fallback from in-memory: {}", 
+                    dataset, source, safeMessage(exception));
             return;
         }
 
-        Object persistedFallback = safeLoadPersistedFallback(dataset);
-        if (hasPersistedFallback(persistedFallback)) {
-            saveFallbackSnapshot(dataset, source, persistedFallback);
-            availabilityService.markDegraded(source, safeMessage(exception));
-            log.warn(
-                    "Failed to refresh {} for {}. Serving snapshot_fallback rebuilt from persisted data ({} entries): {}",
-                    dataset,
-                    source,
-                    fallbackSize(persistedFallback),
-                    safeMessage(exception)
-            );
-            return;
-        }
-
+        // Skip DB fallback when DB is down - return empty immediately
+        // DO NOT try to load from DB as it will block and cause timeouts
         saveFallbackSnapshot(dataset, source, List.of());
         availabilityService.markUnavailable(source, safeMessage(exception));
-        log.warn("Failed to refresh {} for {}. Serving snapshot_fallback with empty data: {}", dataset, source, safeMessage(exception));
+        log.warn("Failed to refresh {} for {}. No snapshot available, serving empty: {}", 
+                dataset, source, safeMessage(exception));
     }
 
     private Object loadPersistedFallback(String dataset) {
@@ -310,7 +321,17 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
             snapshotStore.save(
                     dataset,
                     source,
-                    new StoredSnapshot<>(data, true, Map.of(source, FRESHNESS_SNAPSHOT), Instant.now())
+                    new StoredSnapshot<>(
+                            data,
+                            true,
+                            Map.of(
+                                    source,
+                                    (data instanceof java.util.List<?> list && list.isEmpty())
+                                            ? FRESHNESS_SNAPSHOT_MISSING
+                                            : FRESHNESS_MEMORY_SNAPSHOT
+                            ),
+                            Instant.now()
+                    )
             );
         } catch (Exception snapshotException) {
             log.warn("Unable to save fallback {} snapshot for {}: {}", dataset, source, safeMessage(snapshotException));
@@ -321,6 +342,14 @@ public class ZkBioIntegrationService implements ZkBioIntegrationOperations {
         return throwable.getMessage() != null && !throwable.getMessage().isBlank()
                 ? throwable.getMessage()
                 : "Unknown integration error";
+    }
+
+    private void tryPersistToDatabase(Runnable persistenceAction) {
+        try {
+            persistenceAction.run();
+        } catch (Exception ex) {
+            log.warn("Database unavailable, skipping persistence: {}", ex.getMessage());
+        }
     }
 
     private Exception toException(Throwable throwable) {

@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
+import java.util.stream.Collectors;
 
 /**
  * Zabbix Adapter - Facade compatible for Zabbix integration.
@@ -54,7 +55,74 @@ public class ZabbixAdapter {
      * @return list of ServiceStatusDTO
      */
     public List<ServiceStatusDTO> fetchAll() {
-        return hostCollector.fetchAll();
+        JsonNode hosts = hostCollector.fetchHosts();
+        List<ServiceStatusDTO> statuses = hostCollector.mapHostsToDto(hosts);
+        List<ZabbixProblemDTO> problems = problemCollector.fetchProblems(hosts);
+        List<ZabbixMetricDTO> metrics = await(metricsCollector.fetchMetricsAndMap(hosts));
+        enrichRealStatuses(statuses, problems, metrics);
+        return statuses;
+    }
+
+    /**
+     * Enrich host statuses with problem and ping context without changing collector responsibilities.
+     *
+     * Rules:
+     * - DOWN if host.status != 0 or icmpping == 0
+     * - DEGRADED if host is active and has active problems
+     * - UP otherwise
+     */
+    void enrichRealStatuses(
+            List<ServiceStatusDTO> statuses,
+            List<ZabbixProblemDTO> problems,
+            List<ZabbixMetricDTO> metrics
+    ) {
+        if (statuses == null || statuses.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<ZabbixProblemDTO>> problemsByHostId = (problems == null ? List.<ZabbixProblemDTO>of() : problems)
+                .stream()
+                .filter(problem -> problem.getHostId() != null && !problem.getHostId().isBlank())
+                .filter(problem -> Boolean.TRUE.equals(problem.getActive())
+                        || MonitoringConstants.STATUS_ACTIVE.equalsIgnoreCase(problem.getStatus()))
+                .collect(Collectors.groupingBy(ZabbixProblemDTO::getHostId));
+
+        Map<String, ZabbixMetricDTO> pingByHostId = new HashMap<>();
+        if (metrics != null) {
+            for (ZabbixMetricDTO metric : metrics) {
+                if (metric.getHostId() == null || metric.getHostId().isBlank() || !isPingMetric(metric)) {
+                    continue;
+                }
+
+                ZabbixMetricDTO existing = pingByHostId.get(metric.getHostId());
+                if (existing == null || isMoreRecent(metric, existing)) {
+                    pingByHostId.put(metric.getHostId(), metric);
+                }
+            }
+        }
+
+        for (ServiceStatusDTO status : statuses) {
+            String hostId = status.getHostId();
+            boolean hostMarkedDown = MonitoringConstants.STATUS_DOWN.equalsIgnoreCase(status.getStatus());
+            if (hostMarkedDown) {
+                status.setStatus(MonitoringConstants.STATUS_DOWN);
+                continue;
+            }
+
+            ZabbixMetricDTO pingMetric = hostId == null ? null : pingByHostId.get(hostId);
+            if (pingMetric != null && pingMetric.getValue() != null && Double.compare(pingMetric.getValue(), 0.0d) == 0) {
+                status.setStatus(MonitoringConstants.STATUS_DOWN);
+                continue;
+            }
+
+            boolean hasActiveProblems = hostId != null
+                    && problemsByHostId.containsKey(hostId)
+                    && !problemsByHostId.get(hostId).isEmpty();
+
+            status.setStatus(hasActiveProblems
+                    ? MonitoringConstants.STATUS_DEGRADED
+                    : MonitoringConstants.STATUS_UP);
+        }
     }
 
     // ================== PROBLEMS ==================
@@ -175,5 +243,23 @@ public class ZabbixAdapter {
             }
             throw ex;
         }
+    }
+
+    private boolean isPingMetric(ZabbixMetricDTO metric) {
+        String metricKey = metric.getMetricKey();
+        if (metricKey == null || metricKey.isBlank()) {
+            return false;
+        }
+
+        String normalized = metricKey.toLowerCase();
+        return normalized.startsWith("icmpping")
+                && !normalized.startsWith("icmppingloss")
+                && !normalized.startsWith("icmppingsec");
+    }
+
+    private boolean isMoreRecent(ZabbixMetricDTO left, ZabbixMetricDTO right) {
+        long leftTimestamp = left.getTimestamp() != null ? left.getTimestamp() : Long.MIN_VALUE;
+        long rightTimestamp = right.getTimestamp() != null ? right.getTimestamp() : Long.MIN_VALUE;
+        return leftTimestamp > rightTimestamp;
     }
 }

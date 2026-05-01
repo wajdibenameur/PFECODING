@@ -26,8 +26,9 @@ import java.util.stream.Collectors;
 public class CameraIntegrationService implements AsyncIntegrationService {
 
     private static final String DATASET_HOSTS = "hosts";
-    private static final String FRESHNESS_LIVE = "live";
-    private static final String FRESHNESS_SNAPSHOT = "snapshot_fallback";
+    private static final String FRESHNESS_LIVE = StoredSnapshot.FRESHNESS_LIVE;
+    private static final String FRESHNESS_MEMORY_SNAPSHOT = StoredSnapshot.FRESHNESS_MEMORY_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_SNAPSHOT_MISSING = StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING;
 
     private final CameraAdapter cameraAdapter;
     private final ServiceStatusPersistenceService serviceStatusPersistenceService;
@@ -57,12 +58,21 @@ public class CameraIntegrationService implements AsyncIntegrationService {
     public Mono<Void> refreshAsync() {
         String source = getSourceType().name();
         return Mono.fromCallable(() -> {
+                    // Step 1: Fetch live data
                     List<ServiceStatusDTO> statuses = List.copyOf(cameraAdapter.fetchAll(parseSubnets(), parsePorts()));
-                    serviceStatusPersistenceService.saveAll(statuses);
-                    return statuses.stream().map(this::toHost).toList();
+                    
+                    // Step 2: Convert to hosts
+                    List<UnifiedMonitoringHostDTO> hosts = statuses.stream().map(this::toHost).toList();
+                    
+                    // Step 3: Save snapshot FIRST (always succeeds, in-memory)
+                    saveSnapshot(source, hosts);
+                    
+                    // Step 4: Try DB persistence (non-blocking, wrapped)
+                    tryPersistToDatabase(() -> serviceStatusPersistenceService.saveAll(statuses));
+                    
+                    return hosts;
                 })
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnNext(hosts -> saveSnapshot(source, hosts))
                 .onErrorResume(throwable -> {
                     handleRefreshFailure(source, toException(throwable));
                     return Mono.empty();
@@ -127,12 +137,21 @@ public class CameraIntegrationService implements AsyncIntegrationService {
         List<?> existingSnapshot = safeGetExistingSnapshot(source).orElse(null);
         if (existingSnapshot != null) {
             saveFallbackSnapshot(source, existingSnapshot);
-            log.warn("Failed to refresh camera hosts. Serving snapshot_fallback from the last in-memory snapshot: {}", safeMessage(exception));
+            log.warn("Failed to refresh camera hosts. Serving snapshot_fallback from in-memory: {}", safeMessage(exception));
             return;
         }
 
+        // Skip DB fallback when DB is down - return empty immediately
         saveFallbackSnapshot(source, List.of());
-        log.warn("Failed to refresh camera hosts. Serving snapshot_fallback with empty data: {}", safeMessage(exception));
+        log.warn("Failed to refresh camera hosts. No snapshot available, serving empty: {}", safeMessage(exception));
+    }
+
+    private void tryPersistToDatabase(Runnable persistenceAction) {
+        try {
+            persistenceAction.run();
+        } catch (Exception ex) {
+            log.warn("Database unavailable, skipping persistence: {}", ex.getMessage());
+        }
     }
 
     private Optional<List<?>> safeGetExistingSnapshot(String source) {
@@ -149,7 +168,15 @@ public class CameraIntegrationService implements AsyncIntegrationService {
             snapshotStore.save(
                     DATASET_HOSTS,
                     source,
-                    new StoredSnapshot<>(data, true, Map.of(source, FRESHNESS_SNAPSHOT), Instant.now())
+                    new StoredSnapshot<>(
+                            data,
+                            true,
+                            Map.of(
+                                    source,
+                                    data.isEmpty() ? FRESHNESS_SNAPSHOT_MISSING : FRESHNESS_MEMORY_SNAPSHOT
+                            ),
+                            Instant.now()
+                    )
             );
         } catch (Exception snapshotException) {
             log.warn("Unable to save fallback camera snapshot: {}", safeMessage(snapshotException));

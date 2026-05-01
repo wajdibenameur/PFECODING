@@ -37,8 +37,10 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     private static final String DATASET_HOSTS = "hosts";
     private static final String DATASET_METRICS = "metrics";
     private static final String DATASET_PROBLEMS = "problems";
-    private static final String FRESHNESS_LIVE = "live";
-    private static final String FRESHNESS_SNAPSHOT = "snapshot_fallback";
+    private static final String FRESHNESS_LIVE = StoredSnapshot.FRESHNESS_LIVE;
+    private static final String FRESHNESS_MEMORY_SNAPSHOT = StoredSnapshot.FRESHNESS_MEMORY_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_DATABASE_SNAPSHOT = StoredSnapshot.FRESHNESS_DATABASE_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_SNAPSHOT_MISSING = StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING;
 
     private final ObserviumAdapter observiumAdapter;
     private final ObserviumMonitoringMapper monitoringMapper;
@@ -65,11 +67,18 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     public void refreshHosts() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ServiceStatusDTO> statuses = List.copyOf(observiumAdapter.fetchAll());
-            serviceStatusPersistenceService.saveAll(statuses);
-            monitoredHostPersistenceService.saveAll(source, statuses);
-            List<UnifiedMonitoringHostDTO> data = monitoredHostSnapshotService.loadHosts(getSourceType());
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
+            List<UnifiedMonitoringHostDTO> data = monitoringMapper.toHosts(statuses);
             saveSnapshot(DATASET_HOSTS, source, data);
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped)
+            tryPersistToDatabase(() -> {
+                serviceStatusPersistenceService.saveAll(statuses);
+                monitoredHostPersistenceService.saveAll(source, statuses);
+            });
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_HOSTS, source, exception);
         }
@@ -79,10 +88,15 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     public void refreshProblems() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ObserviumProblemDTO> problems = List.copyOf(observiumAdapter.fetchProblems());
-            observiumPersistenceService.saveProblems(problems);
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
             List<UnifiedMonitoringProblemDTO> data = monitoringMapper.toProblems(problems);
             saveSnapshot(DATASET_PROBLEMS, source, data);
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped)
+            tryPersistToDatabase(() -> observiumPersistenceService.saveProblems(problems));
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_PROBLEMS, source, exception);
         }
@@ -102,9 +116,16 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     public Mono<Void> refreshMetricsAsync() {
         String source = getSourceType().name();
         return Mono.fromCallable(() -> {
+                    // Step 1: Fetch live data
                     List<ObserviumMetricDTO> metrics = List.copyOf(observiumAdapter.fetchMetrics());
-                    observiumPersistenceService.saveMetrics(metrics);
-                    return metrics.stream().map(monitoringMapper::toMetric).toList();
+                    
+                    // Step 2: Save snapshot FIRST (always succeeds, in-memory)
+                    List<UnifiedMonitoringMetricDTO> data = metrics.stream().map(monitoringMapper::toMetric).toList();
+                    
+                    // Step 3: Try DB persistence (non-blocking, wrapped)
+                    tryPersistToDatabase(() -> observiumPersistenceService.saveMetrics(metrics));
+                    
+                    return data;
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnNext(data -> saveSnapshot(DATASET_METRICS, source, data))
@@ -130,31 +151,40 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     }
 
     private void handleRefreshFailure(String dataset, String source, Exception exception) {
-        List<?> existingSnapshot = safeGetExistingSnapshot(dataset, source).orElse(null);
-        if (existingSnapshot != null) {
-            saveFallbackSnapshot(dataset, source, existingSnapshot);
-            availabilityService.markDegraded(source, safeMessage(exception));
-            log.warn("Failed to refresh {} for {}. Serving snapshot_fallback from the last in-memory snapshot: {}", dataset, source, safeMessage(exception));
-            return;
-        }
+        snapshotStore.<List<?>>get(dataset, source)
+                .ifPresentOrElse(existing -> {
+                    snapshotStore.save(
+                            dataset,
+                            source,
+                            new StoredSnapshot<>(existing.data(), true, Map.of(source, FRESHNESS_MEMORY_SNAPSHOT), Instant.now())
+                    );
+                    availabilityService.markDegraded(source, safeMessage(exception));
+                    log.warn("Failed to refresh {} for {}. Keeping last in-memory snapshot: {}",
+                            dataset, source, safeMessage(exception));
+                }, () -> {
+                    List<?> persistedFallback = safeLoadPersistedFallback(dataset);
 
-        List<?> persistedFallback = safeLoadPersistedFallback(dataset);
-        if (!persistedFallback.isEmpty()) {
-            saveFallbackSnapshot(dataset, source, persistedFallback);
-            availabilityService.markDegraded(source, safeMessage(exception));
-            log.warn(
-                    "Failed to refresh {} for {}. Serving snapshot_fallback rebuilt from persisted data ({} entries): {}",
-                    dataset,
-                    source,
-                    persistedFallback.size(),
-                    safeMessage(exception)
-            );
-            return;
-        }
+                    if (!persistedFallback.isEmpty()) {
+                        snapshotStore.save(
+                                dataset,
+                                source,
+                                new StoredSnapshot<>(persistedFallback, true, Map.of(source, FRESHNESS_DATABASE_SNAPSHOT), Instant.now())
+                        );
+                        availabilityService.markDegraded(source, safeMessage(exception));
+                        log.warn("Failed to refresh {} for {}. Loaded fallback from persisted DB: {}",
+                                dataset, source, safeMessage(exception));
+                        return;
+                    }
 
-        saveFallbackSnapshot(dataset, source, List.of());
-        availabilityService.markUnavailable(source, safeMessage(exception));
-        log.warn("Failed to refresh {} for {}. Serving snapshot_fallback with empty data: {}", dataset, source, safeMessage(exception));
+                    snapshotStore.save(
+                            dataset,
+                            source,
+                            new StoredSnapshot<>(List.of(), true, Map.of(source, FRESHNESS_SNAPSHOT_MISSING), Instant.now())
+                    );
+                    availabilityService.markUnavailable(source, safeMessage(exception));
+                    log.warn("Failed to refresh {} for {}. No memory snapshot and no persisted DB fallback: {}",
+                            dataset, source, safeMessage(exception));
+                });
     }
 
     private List<?> loadPersistedFallback(String dataset) {
@@ -192,6 +222,12 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
     private String safeMessage(Exception exception) {
         return exception.getMessage() != null && !exception.getMessage().isBlank()
                 ? exception.getMessage()
+                : "Unknown integration error";
+    }
+
+    private String safeMessage(Throwable throwable) {
+        return throwable.getMessage() != null && !throwable.getMessage().isBlank()
+                ? throwable.getMessage()
                 : "Unknown integration error";
     }
 
@@ -236,17 +272,19 @@ public class ObserviumIntegrationService implements AsyncIntegrationService {
             snapshotStore.save(
                     dataset,
                     source,
-                    new StoredSnapshot<>(data, true, Map.of(source, FRESHNESS_SNAPSHOT), Instant.now())
+                    new StoredSnapshot<>(data, true, Map.of(source, FRESHNESS_MEMORY_SNAPSHOT), Instant.now())
             );
         } catch (Exception snapshotException) {
             log.warn("Unable to save fallback {} snapshot for {}: {}", dataset, source, safeMessage(snapshotException));
         }
     }
 
-    private String safeMessage(Throwable throwable) {
-        return throwable.getMessage() != null && !throwable.getMessage().isBlank()
-                ? throwable.getMessage()
-                : "Unknown integration error";
+    private void tryPersistToDatabase(Runnable persistenceAction) {
+        try {
+            persistenceAction.run();
+        } catch (Exception ex) {
+            log.warn("Database unavailable, skipping persistence: {}", ex.getMessage());
+        }
     }
 
     private Exception toException(Throwable throwable) {

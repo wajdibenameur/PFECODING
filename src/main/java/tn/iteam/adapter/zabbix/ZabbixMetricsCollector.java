@@ -11,10 +11,10 @@ import reactor.core.scheduler.Schedulers;
 import tn.iteam.adapter.zabbix.ZabbixClient;
 import tn.iteam.domain.MonitoredHost;
 import tn.iteam.dto.ZabbixMetricDTO;
-import tn.iteam.service.ZabbixSyncService;
+import tn.iteam.service.ZabbixHostSyncService;
 import tn.iteam.util.IntegrationClientSupport;
 import tn.iteam.util.MonitoringConstants;
-
+import tn.iteam.service.ZabbixHostSyncService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -64,12 +64,12 @@ public class ZabbixMetricsCollector {
     private static final String UNKNOWN_SOURCE_LABEL = MonitoringConstants.SOURCE_LABEL_ZABBIX;
 
     private final ZabbixClient zabbixClient;
-    private final ZabbixSyncService syncService;
 
+    private final ZabbixHostSyncService syncService;
     @Value("${zabbix.metrics.host-batch-size:2}")
     private int configuredHostItemsBatchSize;
 
-    public ZabbixMetricsCollector(ZabbixClient zabbixClient, ZabbixSyncService syncService) {
+    public ZabbixMetricsCollector(ZabbixClient zabbixClient, ZabbixHostSyncService syncService) {
         this.zabbixClient = zabbixClient;
         this.syncService = syncService;
     }

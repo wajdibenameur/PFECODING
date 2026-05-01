@@ -286,11 +286,10 @@ public class ZabbixClient {
         Map<String, Object> payload = createBasePayload("problem.get");
         Map<String, Object> params = new HashMap<>();
         params.put(OUTPUT, EXTEND);
-        params.put(SELECT_HOSTS, PROBLEM_HOST_OUTPUT);
         params.put(SELECT_TAGS, EXTEND);
         params.put(SORT_FIELD, EVENT_ID);
         params.put(SORT_ORDER, DESC);
-        params.put(LIMIT, 200);
+        params.put(LIMIT, 50);
         params.put(RECENT, true);
         params.put(SEVERITIES, ALL_SEVERITIES);
         payload.put(PARAMS, params);
@@ -308,7 +307,6 @@ public class ZabbixClient {
         Map<String, Object> params = new HashMap<>();
         params.put(OUTPUT, EXTEND);
         params.put(HOSTIDS, List.of(hostId));
-        params.put(SELECT_HOSTS, PROBLEM_HOST_OUTPUT);
         params.put(SELECT_TAGS, EXTEND);
         params.put(SORT_FIELD, EVENT_ID);
         params.put(SORT_ORDER, DESC);
