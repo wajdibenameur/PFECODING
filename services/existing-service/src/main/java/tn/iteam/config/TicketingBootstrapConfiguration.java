@@ -90,7 +90,7 @@ public class TicketingBootstrapConfiguration {
             User user = new User();
             user.setUsername(username);
             user.setEmail(email);
-            user.setPassword("change-me");
+            // Passwords are managed exclusively by Keycloak; no local password is stored.
             user.setRole(role);
             return userRepository.save(user);
         });
