@@ -8,6 +8,7 @@ import tn.iteam.monitoring.dto.UnifiedMonitoringHostDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringMetricDTO;
 import tn.iteam.monitoring.dto.UnifiedMonitoringProblemDTO;
 import tn.iteam.monitoring.snapshot.SnapshotStore;
+import tn.iteam.monitoring.snapshot.StoredSnapshot;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,7 +21,6 @@ import java.util.Map;
 public class MonitoringCacheService {
 
     private static final Logger log = LoggerFactory.getLogger(MonitoringCacheService.class);
-    private static final String FRESHNESS_SNAPSHOT_MISSING = "snapshot_missing";
     private static final String DATASET_PROBLEMS = "problems";
     private static final String DATASET_METRICS = "metrics";
     private static final String DATASET_HOSTS = "hosts";
@@ -84,10 +84,10 @@ public class MonitoringCacheService {
                             log.debug("Serving degraded monitoring {} snapshot for source={}", dataset, sourceType.name());
                         }
                     }, () -> {
-                        freshness.put(sourceType.name(), FRESHNESS_SNAPSHOT_MISSING);
+                        freshness.put(sourceType.name(), StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING);
                     });
 
-            if (FRESHNESS_SNAPSHOT_MISSING.equals(freshness.get(sourceType.name()))) {
+            if (StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING.equals(freshness.get(sourceType.name()))) {
                 degraded = true;
             } else {
                 degraded = degraded || snapshotStore.<List<T>>get(dataset, sourceType.name())
@@ -127,7 +127,7 @@ public class MonitoringCacheService {
 
     private String firstFreshness(Map<String, String> freshness) {
         if (freshness == null || freshness.isEmpty()) {
-            return "snapshot";
+            return StoredSnapshot.FRESHNESS_SNAPSHOT_FALLBACK;
         }
         return freshness.values().iterator().next();
     }

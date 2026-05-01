@@ -15,6 +15,7 @@ import {
 } from '../../../shared/ui/collection-control-bar/collection-control-bar.component';
 import { MonitoringApiService } from '../data/monitoring-api.service';
 import { MonitoringRealtimeService } from '../data/monitoring-realtime.service';
+import { findSourceAvailability, toZkBioProblem } from '../data/monitoring-source.utils';
 
 @Component({
   selector: 'app-monitoring-zkbio-page',
@@ -107,11 +108,10 @@ export class MonitoringZkBioPageComponent implements OnInit {
       )
     }).subscribe({
       next: ({ status, devices, monitoringProblems, metricsMetadata, attendance, sourceHealth }) => {
-        const availability =
-          sourceHealth.find((entry) => entry.source.toUpperCase() === 'ZKBIO') ?? null;
+        const availability = findSourceAvailability(sourceHealth, 'ZKBIO');
         const zkbioProblems = monitoringProblems.data
           .filter((problem) => (problem.source ?? '').toUpperCase() === 'ZKBIO')
-          .map((problem) => this.toZkBioProblem(problem));
+          .map((problem) => toZkBioProblem(problem));
 
         this.serverStatus.set(this.applyAvailability(status, availability));
         this.devices.set(devices);
@@ -286,12 +286,8 @@ export class MonitoringZkBioPageComponent implements OnInit {
       }
     });
 
-    this.realtime.monitoringSources$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.realtime.monitoringSourceHealth$('ZKBIO').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (incoming) => {
-        if (incoming.source.toUpperCase() !== 'ZKBIO') {
-          return;
-        }
-
         this.serverStatus.update((current) => this.applyAvailability(current, incoming));
       },
       error: (error) => {
@@ -343,23 +339,6 @@ export class MonitoringZkBioPageComponent implements OnInit {
     }
 
     return Array.from(map.values());
-  }
-
-  private toZkBioProblem(problem: MonitoringProblem): ZkBioProblem {
-    return {
-      problemId: problem.problemId ?? problem.id,
-      host: problem.hostName ?? problem.hostId ?? 'UNKNOWN',
-      description: problem.description ?? 'No description',
-      severity: problem.severity ?? 'UNKNOWN',
-      active: problem.active,
-      status: problem.status ?? (problem.active ? 'ACTIVE' : 'RESOLVED'),
-      startedAt: problem.startedAt ?? null,
-      startedAtFormatted: problem.startedAtFormatted ?? null,
-      resolvedAt: problem.resolvedAt ?? null,
-      resolvedAtFormatted: problem.resolvedAtFormatted ?? null,
-      source: typeof problem.source === 'string' ? problem.source : String(problem.source ?? 'ZKBIO'),
-      eventId: problem.eventId ?? 0
-    };
   }
 
   private readMetadataValue(

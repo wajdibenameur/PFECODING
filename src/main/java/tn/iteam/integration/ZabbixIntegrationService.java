@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import tn.iteam.adapter.zabbix.ZabbixAdapter;
 import tn.iteam.domain.ZabbixMetric;
 import tn.iteam.dto.ServiceStatusDTO;
@@ -12,26 +14,25 @@ import tn.iteam.mapper.ZabbixMonitoringMapper;
 import tn.iteam.monitoring.MonitoringSourceType;
 import tn.iteam.monitoring.snapshot.SnapshotStore;
 import tn.iteam.monitoring.snapshot.StoredSnapshot;
-import tn.iteam.service.ServiceStatusPersistenceService;
-import tn.iteam.service.SourceAvailabilityService;
-import tn.iteam.service.ZabbixMetricsService;
-import tn.iteam.service.ZabbixProblemService;
+import tn.iteam.service.*;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-public class ZabbixIntegrationService implements IntegrationService {
+public class ZabbixIntegrationService implements AsyncIntegrationService {
 
     private static final Logger log = LoggerFactory.getLogger(ZabbixIntegrationService.class);
     private static final String DATASET_HOSTS = "hosts";
     private static final String DATASET_METRICS = "metrics";
     private static final String DATASET_PROBLEMS = "problems";
-    private static final String FRESHNESS_LIVE = "live";
-    private static final String FRESHNESS_SNAPSHOT = "snapshot_fallback";
+    private static final String FRESHNESS_LIVE = StoredSnapshot.FRESHNESS_LIVE;
+    private static final String FRESHNESS_MEMORY_SNAPSHOT = StoredSnapshot.FRESHNESS_MEMORY_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_DATABASE_SNAPSHOT = StoredSnapshot.FRESHNESS_DATABASE_SNAPSHOT_FALLBACK;
+    private static final String FRESHNESS_SNAPSHOT_MISSING = StoredSnapshot.FRESHNESS_SNAPSHOT_MISSING;
 
     private final ZabbixAdapter zabbixAdapter;
     private final ZabbixMonitoringMapper monitoringMapper;
@@ -40,6 +41,8 @@ public class ZabbixIntegrationService implements IntegrationService {
     private final ZabbixMetricsService zabbixMetricsService;
     private final SnapshotStore snapshotStore;
     private final SourceAvailabilityService availabilityService;
+    private final MonitoredHostSnapshotService monitoredHostSnapshotService;
+    private final ZabbixHostSyncService zabbixSyncService;
 
     @Override
     public MonitoringSourceType getSourceType() {
@@ -48,22 +51,26 @@ public class ZabbixIntegrationService implements IntegrationService {
 
     @Override
     public void refresh() {
-        refreshHosts();
-        refreshProblems();
-        refreshMetrics();
+        subscribeSafely("refresh", refreshAsync());
     }
 
     @Override
     public void refreshHosts() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ServiceStatusDTO> statuses = List.copyOf(zabbixAdapter.fetchAll());
-            serviceStatusPersistenceService.saveAll(statuses);
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
+            zabbixSyncService.loadHostMap();
             saveSnapshot(
                     DATASET_HOSTS,
                     source,
-                    statuses.stream().map(monitoringMapper::toHostFromServiceStatus).toList()
+                    monitoredHostSnapshotService.loadHosts(getSourceType())
             );
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped)
+            tryPersistToDatabase(() -> serviceStatusPersistenceService.saveAll(statuses));
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_HOSTS, source, exception);
         }
@@ -73,12 +80,18 @@ public class ZabbixIntegrationService implements IntegrationService {
     public void refreshProblems() {
         String source = getSourceType().name();
         try {
+            // Step 1: Fetch live data
             List<ZabbixProblemDTO> problems = List.copyOf(zabbixProblemService.synchronizeActiveProblemsFromZabbix());
+            
+            // Step 2: Save snapshot FIRST (always succeeds, in-memory)
             saveSnapshot(
                     DATASET_PROBLEMS,
                     source,
                     problems.stream().map(monitoringMapper::toProblem).toList()
             );
+            
+            // Step 3: Try DB persistence (non-blocking, wrapped) - skipped for problems
+            // Problems are handled by ZabbixProblemService internally
         } catch (Exception exception) {
             handleRefreshFailure(DATASET_PROBLEMS, source, exception);
         }
@@ -86,38 +99,69 @@ public class ZabbixIntegrationService implements IntegrationService {
 
     @Override
     public void refreshMetrics() {
-        String source = getSourceType().name();
-        try {
-            List<ZabbixMetric> metrics = List.copyOf(zabbixMetricsService.fetchAndSaveMetrics());
-            saveSnapshot(
-                    DATASET_METRICS,
-                    source,
-                    metrics.stream().map(monitoringMapper::toMetric).toList()
-            );
-        } catch (Exception exception) {
-            handleRefreshFailure(DATASET_METRICS, source, exception);
-        }
+        subscribeSafely("refreshMetrics", refreshMetricsAsync());
     }
 
-    private <T> void refreshDataset(String dataset, Supplier<List<T>> loader) {
-        String source = getSourceType().name();
+    public Mono<Void> refreshAsync() {
+        return runLegacyStepAsync("refreshHosts", this::refreshHosts)
+                .then(runLegacyStepAsync("refreshProblems", this::refreshProblems))
+                .then(refreshMetricsAsync());
+    }
 
-        try {
-            List<T> data = List.copyOf(loader.get());
-            saveSnapshot(dataset, source, data);
-        } catch (Exception exception) {
-            handleRefreshFailure(dataset, source, exception);
-        }
+    public Mono<Void> refreshMetricsAsync() {
+        String source = getSourceType().name();
+        return zabbixMetricsService.fetchAndSaveMetrics()
+                .map(List::copyOf)
+                .doOnNext(metrics -> {
+                    // Step 1: Save snapshot FIRST (always succeeds, in-memory)
+                    saveSnapshot(
+                            DATASET_METRICS,
+                            source,
+                            metrics.stream().map(monitoringMapper::toMetric).toList()
+                    );
+                    // Step 2: DB persistence is handled inside fetchAndSaveMetrics
+                })
+                .onErrorResume(throwable -> {
+                    handleRefreshFailure(DATASET_METRICS, source, toException(throwable));
+                    return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<Void> runLegacyStepAsync(String operation, Runnable action) {
+        return Mono.fromRunnable(action)
+                .subscribeOn(Schedulers.boundedElastic())
+                .then()
+                .onErrorResume(throwable -> {
+                    log.warn("Zabbix {} async step failed but application remains available: {}", operation, safeMessage(throwable));
+                    return Mono.<Void>empty();
+                });
+    }
+
+    private void subscribeSafely(String operation, Mono<Void> pipeline) {
+        pipeline.subscribe(
+                unused -> {
+                },
+                throwable -> log.warn(
+                        "Zabbix {} async failed but application remains available: {}",
+                        operation,
+                        safeMessage(throwable)
+                )
+        );
     }
 
     private <T> void saveSnapshot(String dataset, String source, List<T> data) {
-        snapshotStore.save(
-                dataset,
-                source,
-                StoredSnapshot.of(data, false, Map.of(source, FRESHNESS_LIVE))
-        );
-        availabilityService.markAvailable(source);
-        log.debug("Stored {} {} snapshot entries for {}", data.size(), dataset, source);
+        try {
+            snapshotStore.save(
+                    dataset,
+                    source,
+                    StoredSnapshot.of(data, false, Map.of(source, FRESHNESS_LIVE))
+            );
+            availabilityService.markAvailable(source);
+            log.debug("Stored {} {} snapshot entries for {}", data.size(), dataset, source);
+        } catch (Exception exception) {
+            log.warn("Unable to store {} snapshot for {}: {}", dataset, source, safeMessage(exception));
+        }
     }
 
     private void handleRefreshFailure(String dataset, String source, Exception exception) {
@@ -126,19 +170,107 @@ public class ZabbixIntegrationService implements IntegrationService {
                     snapshotStore.save(
                             dataset,
                             source,
-                            new StoredSnapshot<>(existing.data(), true, Map.of(source, FRESHNESS_SNAPSHOT), Instant.now())
+                            new StoredSnapshot<>(existing.data(), true, Map.of(source, FRESHNESS_MEMORY_SNAPSHOT), Instant.now())
                     );
                     availabilityService.markDegraded(source, safeMessage(exception));
-                    log.warn("Failed to refresh {} for {}. Keeping last snapshot: {}", dataset, source, safeMessage(exception));
+                    log.warn("Failed to refresh {} for {}. Keeping last in-memory snapshot: {}",
+                            dataset, source, safeMessage(exception));
                 }, () -> {
+                    List<?> persistedFallback = safeLoadPersistedFallback(dataset);
+
+                    if (!persistedFallback.isEmpty()) {
+                        snapshotStore.save(
+                                dataset,
+                                source,
+                                new StoredSnapshot<>(persistedFallback, true, Map.of(source, FRESHNESS_DATABASE_SNAPSHOT), Instant.now())
+                        );
+                        availabilityService.markDegraded(source, safeMessage(exception));
+                        log.warn("Failed to refresh {} for {}. Loaded fallback from persisted DB: {}",
+                                dataset, source, safeMessage(exception));
+                        return;
+                    }
+
+                    snapshotStore.save(
+                            dataset,
+                            source,
+                            new StoredSnapshot<>(List.of(), true, Map.of(source, FRESHNESS_SNAPSHOT_MISSING), Instant.now())
+                    );
                     availabilityService.markUnavailable(source, safeMessage(exception));
-                    log.warn("Failed to refresh {} for {} and no snapshot is available: {}", dataset, source, safeMessage(exception));
+                    log.warn("Failed to refresh {} for {}. No memory snapshot and no persisted DB fallback: {}",
+                            dataset, source, safeMessage(exception));
                 });
+    }
+
+    private List<?> loadPersistedFallback(String dataset) {
+        return switch (dataset) {
+            case DATASET_HOSTS -> monitoredHostSnapshotService.loadHosts(getSourceType());
+            case DATASET_PROBLEMS -> zabbixProblemService.getPersistedFilteredActiveProblems()
+                    .stream()
+                    .map(monitoringMapper::toProblem)
+                    .toList();
+            case DATASET_METRICS -> zabbixMetricsService.getPersistedMetricsSnapshot()
+                    .stream()
+                    .map(monitoringMapper::toMetric)
+                    .toList();
+            default -> List.of();
+        };
+    }
+
+    private Optional<List<?>> safeGetExistingSnapshot(String dataset, String source) {
+        try {
+            return snapshotStore.<List<?>>get(dataset, source)
+                    .map(StoredSnapshot::data);
+        } catch (Exception exception) {
+            log.warn("Unable to read existing {} snapshot for {}: {}", dataset, source, safeMessage(exception));
+            return Optional.empty();
+        }
+    }
+
+    private List<?> safeLoadPersistedFallback(String dataset) {
+        try {
+            return loadPersistedFallback(dataset);
+        } catch (Exception exception) {
+            log.warn("Unable to load persisted {} fallback: {}", dataset, safeMessage(exception));
+            return List.of();
+        }
+    }
+
+    private void saveFallbackSnapshot(String dataset, String source, List<?> data) {
+        try {
+            snapshotStore.save(
+                    dataset,
+                    source,
+                    new StoredSnapshot<>(data, true, Map.of(source, FRESHNESS_MEMORY_SNAPSHOT), Instant.now())
+            );
+        } catch (Exception snapshotException) {
+            log.warn("Unable to save fallback {} snapshot for {}: {}", dataset, source, safeMessage(snapshotException));
+        }
     }
 
     private String safeMessage(Exception exception) {
         return exception.getMessage() != null && !exception.getMessage().isBlank()
                 ? exception.getMessage()
                 : "Unknown integration error";
+    }
+
+    private String safeMessage(Throwable throwable) {
+        return throwable.getMessage() != null && !throwable.getMessage().isBlank()
+                ? throwable.getMessage()
+                : "Unknown integration error";
+    }
+
+    private void tryPersistToDatabase(Runnable persistenceAction) {
+        try {
+            persistenceAction.run();
+        } catch (Exception ex) {
+            log.warn("Database unavailable, skipping persistence: {}", ex.getMessage());
+        }
+    }
+
+    private Exception toException(Throwable throwable) {
+        if (throwable instanceof Exception exception) {
+            return exception;
+        }
+        return new RuntimeException(throwable);
     }
 }

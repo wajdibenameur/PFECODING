@@ -57,7 +57,7 @@ frontend/node_modules
 frontend/.env
 frontend/dist
 frontend/build
-
+frontend/.codex-audit/
 
 PFERTC/artifacts/logs/
 PFERTC/artifacts/metrics/
@@ -78,3 +78,4 @@ src/main/resources/sql/
 /codex-memory2/
 /docs/
 /suivi-pfe2/
+/src/UML/

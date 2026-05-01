@@ -5,6 +5,7 @@ import ai.djl.translate.TranslateException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import tn.iteam.domain.ZabbixMetric;
 import tn.iteam.domain.ZabbixProblem;
@@ -31,6 +32,11 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
+@ConditionalOnProperty(
+        name = "app.db.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 @RequiredArgsConstructor
 public class DashboardServiceImpl implements DashboardService {
 
