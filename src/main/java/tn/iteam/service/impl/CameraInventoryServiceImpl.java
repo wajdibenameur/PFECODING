@@ -1,6 +1,7 @@
 package tn.iteam.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import tn.iteam.dto.CameraDeviceDTO;
 import tn.iteam.repository.ServiceStatusRepository;
@@ -10,6 +11,11 @@ import tn.iteam.util.MonitoringConstants;
 import java.util.List;
 
 @Service
+@ConditionalOnProperty(
+        name = "app.db.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 @RequiredArgsConstructor
 public class CameraInventoryServiceImpl implements CameraInventoryService {
 

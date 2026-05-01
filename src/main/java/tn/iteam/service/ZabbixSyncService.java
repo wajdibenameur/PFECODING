@@ -4,19 +4,25 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import tn.iteam.adapter.zabbix.ZabbixClient;
 import tn.iteam.domain.MonitoredHost;
 import tn.iteam.repository.MonitoredHostRepository;
 import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
-
+@ConditionalOnProperty(
+        name = "app.db.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 @Service
 @RequiredArgsConstructor
-public class ZabbixSyncService {
+public class ZabbixSyncService implements ZabbixHostSyncService{
 
     private static final Logger log = LoggerFactory.getLogger(ZabbixSyncService.class);
     private static final long CACHE_TTL_MS = 30_000L;
@@ -45,14 +51,14 @@ public class ZabbixSyncService {
 
         for (JsonNode h : hosts) {
             String hostId = h.path("hostid").asText();
-            String name = normalizeText(h.path("host").asText());
+            String name = MonitoringNormalizeUtils.normalizeText(h.path("host").asText());
             String ip = null;
             Integer port = null;
 
             if (h.has("interfaces") && h.get("interfaces").size() > 0) {
                 for (JsonNode iface : h.get("interfaces")) {
                     if (iface.path("main").asInt(0) == 1) {
-                        ip = normalizeIp(iface.path("ip").asText(null));
+                        ip = MonitoringNormalizeUtils.normalizeIp(iface.path("ip").asText(null));
                         port = iface.path("port").isMissingNode() ? null : iface.path("port").asInt();
                     }
                 }
@@ -65,7 +71,7 @@ public class ZabbixSyncService {
             MonitoredHost host = monitoredHostRepository.findFirstByHostIdAndSource(hostId, MonitoringConstants.SOURCE_ZABBIX)
                     .map(existing -> {
                         existing.setName(resolvedName != null ? resolvedName : existing.getName());
-                        existing.setIp(resolvedIp != null ? resolvedIp : normalizeIp(existing.getIp()));
+                        existing.setIp(resolvedIp != null ? resolvedIp : MonitoringNormalizeUtils.normalizeIp(existing.getIp()));
                         existing.setPort(resolvedPort != null ? resolvedPort : existing.getPort());
                         return monitoredHostRepository.save(existing);
                     })
@@ -97,21 +103,5 @@ public class ZabbixSyncService {
             }
             throw ex;
         }
-    }
-
-    private String normalizeIp(String value) {
-        String normalized = normalizeText(value);
-        if (normalized == null || MonitoringConstants.IP_UNKNOWN.equalsIgnoreCase(normalized)) {
-            return null;
-        }
-        return normalized;
-    }
-
-    private String normalizeText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
     }
 }

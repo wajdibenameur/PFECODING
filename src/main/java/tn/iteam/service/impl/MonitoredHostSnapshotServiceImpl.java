@@ -10,6 +10,7 @@ import tn.iteam.repository.MonitoredHostRepository;
 import tn.iteam.repository.ServiceStatusRepository;
 import tn.iteam.service.MonitoredHostSnapshotService;
 import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,11 +35,11 @@ public class MonitoredHostSnapshotServiceImpl implements MonitoredHostSnapshotSe
         Map<String, ServiceStatus> statusesByIp = new LinkedHashMap<>();
         Map<String, ServiceStatus> statusesByName = new LinkedHashMap<>();
         for (ServiceStatus status : statuses) {
-            String ip = normalizeIp(status.getIp());
+            String ip = MonitoringNormalizeUtils.normalizeIp(status.getIp());
             if (ip != null) {
                 statusesByIp.put(ip, status);
             }
-            String name = normalizeText(status.getName());
+            String name = MonitoringNormalizeUtils.normalizeText(status.getName());
             if (name != null) {
                 statusesByName.put(name, status);
             }
@@ -55,8 +56,8 @@ public class MonitoredHostSnapshotServiceImpl implements MonitoredHostSnapshotSe
             Map<String, ServiceStatus> statusesByIp,
             Map<String, ServiceStatus> statusesByName
     ) {
-        String ip = normalizeIp(host.getIp());
-        String name = normalizeText(host.getName());
+        String ip = MonitoringNormalizeUtils.normalizeIp(host.getIp());
+        String name = MonitoringNormalizeUtils.normalizeText(host.getName());
 
         ServiceStatus matchedStatus = ip != null
                 ? statusesByIp.get(ip)
@@ -67,7 +68,7 @@ public class MonitoredHostSnapshotServiceImpl implements MonitoredHostSnapshotSe
 
         String resolvedIp = ip != null
                 ? ip
-                : matchedStatus != null ? normalizeIp(matchedStatus.getIp()) : null;
+                : matchedStatus != null ? MonitoringNormalizeUtils.normalizeIp(matchedStatus.getIp()) : null;
 
         return UnifiedMonitoringHostDTO.builder()
                 .id(source.name() + ":" + host.getHostId())
@@ -76,23 +77,15 @@ public class MonitoredHostSnapshotServiceImpl implements MonitoredHostSnapshotSe
                 .name(name)
                 .ip(resolvedIp)
                 .port(host.getPort() != null ? host.getPort() : matchedStatus != null ? matchedStatus.getPort() : null)
-                .protocol(matchedStatus != null ? normalizeText(matchedStatus.getProtocol()) : null)
-                .status(matchedStatus != null ? normalizeText(matchedStatus.getStatus()) : null)
+                .protocol(matchedStatus != null ? MonitoringNormalizeUtils.normalizeText(matchedStatus.getProtocol()) : null)
+                .status(matchedStatus != null ? MonitoringNormalizeUtils.normalizeText(matchedStatus.getStatus()) : null)
                 .category(matchedStatus != null ? normalizeCategory(matchedStatus.getCategory(), source) : normalizeCategory(null, source))
                 .lastCheck(matchedStatus != null ? matchedStatus.getLastCheck() : null)
                 .build();
     }
 
-    private String normalizeIp(String value) {
-        String normalized = normalizeText(value);
-        if (normalized == null || MonitoringConstants.IP_UNKNOWN.equalsIgnoreCase(normalized)) {
-            return null;
-        }
-        return normalized;
-    }
-
     private String normalizeCategory(String value, MonitoringSourceType source) {
-        String normalized = normalizeText(value);
+        String normalized = MonitoringNormalizeUtils.normalizeText(value);
         if (normalized != null) {
             return normalized;
         }
@@ -103,11 +96,4 @@ public class MonitoredHostSnapshotServiceImpl implements MonitoredHostSnapshotSe
         };
     }
 
-    private String normalizeText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
 }

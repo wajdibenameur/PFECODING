@@ -17,13 +17,14 @@ public class SourceAvailabilityServiceImpl implements SourceAvailabilityService 
     private static final String OBSERVIUM = "OBSERVIUM";
     private static final String ZKBIO = "ZKBIO";
     private static final String CAMERA = "CAMERA";
+    private static final String DATABASE = "DATABASE";
     private static final String UNKNOWN = "UNKNOWN";
     private static final String UNKNOWN_INTEGRATION_ERROR = "Unknown integration error";
     private static final String AVAILABLE = "AVAILABLE";
     private static final String DEGRADED = "DEGRADED";
     private static final String UNAVAILABLE = "UNAVAILABLE";
 
-    private static final List<String> KNOWN_SOURCES = List.of(ZABBIX, OBSERVIUM, ZKBIO, CAMERA);
+    private static final List<String> KNOWN_SOURCES = List.of(ZABBIX, OBSERVIUM, ZKBIO, CAMERA, DATABASE);
 
     private final Map<String, AvailabilityState> states = new ConcurrentHashMap<>();
     private final MonitoringWebSocketPublisher publisher;

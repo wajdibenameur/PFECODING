@@ -1,19 +1,21 @@
 package tn.iteam.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.iteam.domain.MonitoredHost;
 import tn.iteam.dto.ServiceStatusDTO;
 import tn.iteam.repository.MonitoredHostRepository;
 import tn.iteam.service.MonitoredHostPersistenceService;
-import tn.iteam.util.MonitoringConstants;
+import tn.iteam.util.MonitoringNormalizeUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
+@ConditionalOnProperty(name = "app.db.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class MonitoredHostPersistenceServiceImpl implements MonitoredHostPersistenceService {
 
@@ -40,8 +42,8 @@ public class MonitoredHostPersistenceServiceImpl implements MonitoredHostPersist
             String hostId = entry.getKey();
             ServiceStatusDTO dto = entry.getValue();
 
-            String incomingName = normalizeText(dto.getName());
-            String incomingIp = normalizeIp(dto.getIp());
+            String incomingName = MonitoringNormalizeUtils.normalizeText(dto.getName());
+            String incomingIp = MonitoringNormalizeUtils.normalizeIp(dto.getIp());
             Integer incomingPort = dto.getPort();
 
             MonitoredHost entity = monitoredHostRepository.findFirstByHostIdAndSource(hostId, source)
@@ -67,7 +69,7 @@ public class MonitoredHostPersistenceServiceImpl implements MonitoredHostPersist
         }
         if (incomingIp != null) {
             existing.setIp(incomingIp);
-        } else if (normalizeIp(existing.getIp()) == null) {
+        } else if (MonitoringNormalizeUtils.normalizeIp(existing.getIp()) == null) {
             existing.setIp(null);
         }
         if (incomingPort != null) {
@@ -77,27 +79,16 @@ public class MonitoredHostPersistenceServiceImpl implements MonitoredHostPersist
     }
 
     private String resolveHostId(ServiceStatusDTO dto) {
-        String ip = normalizeIp(dto.getIp());
+        String explicitHostId = MonitoringNormalizeUtils.normalizeText(dto.getHostId());
+        if (explicitHostId != null) {
+            return explicitHostId;
+        }
+
+        String ip = MonitoringNormalizeUtils.normalizeIp(dto.getIp());
         if (ip != null) {
             return ip;
         }
 
-        return normalizeText(dto.getName());
-    }
-
-    private String normalizeIp(String value) {
-        String normalized = normalizeText(value);
-        if (normalized == null || MonitoringConstants.IP_UNKNOWN.equalsIgnoreCase(normalized)) {
-            return null;
-        }
-        return normalized;
-    }
-
-    private String normalizeText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
+        return MonitoringNormalizeUtils.normalizeText(dto.getName());
     }
 }
