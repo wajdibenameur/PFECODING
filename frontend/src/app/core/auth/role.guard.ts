@@ -8,7 +8,9 @@ export class RoleGuard implements CanActivate {
   private readonly router = inject(Router);
 
   canActivate(route: ActivatedRouteSnapshot): boolean {
-    const requiredRoles = route.data?.['roles'] as string[] || [];
+    const requiredRoles = ((route.data?.['roles'] as string[]) || []).map((role) =>
+      role.trim().toUpperCase()
+    );
     const userRoles = this.auth.getRoles();
 
     if (requiredRoles.some(role => userRoles.includes(role))) {

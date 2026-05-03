@@ -6,14 +6,14 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@Schema(description = "Corps de requête pour ajouter une intervention sur un ticket")
+@Schema(description = "Corps de requete pour ajouter une intervention sur un ticket")
 public class TicketInterventionRequestDTO {
-    @Schema(description = "Identifiant de l'utilisateur ayant réalisé l'intervention", example = "7")
-    private Long userId;
-    @Schema(description = "Action réalisée", example = "Redémarrage de l'équipement")
+    @Schema(description = "Action realisee", example = "Redemarrage de l equipement")
     private String action;
-    @Schema(description = "Commentaire complémentaire", example = "Intervention réalisée à distance")
+
+    @Schema(description = "Commentaire complementaire", example = "Intervention realisee a distance")
     private String comment;
-    @Schema(description = "Résultat de l'intervention", example = "Service rétabli")
+
+    @Schema(description = "Resultat de l intervention", example = "Service retabli")
     private String result;
 }

@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { AuthContextPort, AuthUser } from '../../core/auth/auth-context.port';
 
@@ -56,22 +56,22 @@ export class RealAuthContextService implements AuthContextPort {
   }
 
   hasRole(role: string): boolean {
-    return this.getRoles().includes(role);
+    return this.getRoles().includes(role.trim().toUpperCase());
   }
 
   hasPermission(permission: string): boolean {
     // Map roles to permissions based on backend logic
     const roles = this.getRoles();
-    if (roles.includes('superadmin')) {
+    if (roles.includes('SUPERADMIN')) {
       return true; // Superadmin has all permissions
     }
-    if (roles.includes('admin')) {
+    if (roles.includes('ADMIN')) {
       return this.isAdminPermission(permission);
     }
-    if (roles.includes('support')) {
+    if (roles.includes('SUPPORT')) {
       return this.isSupportPermission(permission);
     }
-    if (roles.includes('viewer')) {
+    if (roles.includes('VIEWER')) {
       return this.isViewerPermission(permission);
     }
     return false;
@@ -80,7 +80,9 @@ export class RealAuthContextService implements AuthContextPort {
   private decodeUserFromToken(token: string): AuthUser | null {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      const roles = payload.realm_access?.roles || [];
+      const roles = ((payload.realm_access?.roles || []) as string[]).map((role) =>
+        String(role).trim().toUpperCase()
+      );
       return {
         id: payload.sub,
         username: payload.preferred_username || payload.sub,

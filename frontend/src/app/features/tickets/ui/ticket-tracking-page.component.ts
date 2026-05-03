@@ -26,11 +26,9 @@ export class TicketTrackingPageComponent {
   readonly statusDraft = signal<TicketStatus>('OPEN');
   readonly resolutionDraft = signal('');
   readonly assignUserId = signal<number | null>(null);
-  readonly interventionUserId = signal<number | null>(null);
   readonly interventionAction = signal('COMMENT');
   readonly interventionComment = signal('');
   readonly interventionResult = signal('');
-  readonly adminId = signal<number | null>(null);
   readonly rejectReason = signal('');
 
   readonly statusOptions: Array<TicketStatus> = [
@@ -93,13 +91,12 @@ export class TicketTrackingPageComponent {
 
   addIntervention(): void {
     const ticket = this.selectedTicket();
-    if (!ticket || !this.interventionUserId() || !this.interventionComment().trim()) {
+    if (!ticket || !this.interventionComment().trim()) {
       return;
     }
 
     this.runMutation(
       this.api.addIntervention(ticket.id, {
-        userId: this.interventionUserId()!,
         action: this.interventionAction().trim() || 'COMMENT',
         comment: this.interventionComment().trim(),
         result: this.interventionResult().trim() || null
@@ -113,22 +110,21 @@ export class TicketTrackingPageComponent {
 
   validateTicket(): void {
     const ticket = this.selectedTicket();
-    if (!ticket || !this.adminId()) {
+    if (!ticket) {
       return;
     }
 
-    this.runMutation(this.api.validateTicket(ticket.id, { adminId: this.adminId()! }));
+    this.runMutation(this.api.validateTicket(ticket.id, {}));
   }
 
   rejectTicket(): void {
     const ticket = this.selectedTicket();
-    if (!ticket || !this.adminId() || !this.rejectReason().trim()) {
+    if (!ticket || !this.rejectReason().trim()) {
       return;
     }
 
     this.runMutation(
       this.api.rejectTicket(ticket.id, {
-        adminId: this.adminId()!,
         reason: this.rejectReason().trim()
       }),
       () => this.rejectReason.set('')
@@ -145,14 +141,6 @@ export class TicketTrackingPageComponent {
 
   parseAssignUser(value: string | number | null): void {
     this.assignUserId.set(value == null || value === '' ? null : Number(value));
-  }
-
-  parseAdminUser(value: string | number | null): void {
-    this.adminId.set(value == null || value === '' ? null : Number(value));
-  }
-
-  parseInterventionUser(value: string | number | null): void {
-    this.interventionUserId.set(value == null || value === '' ? null : Number(value));
   }
 
   private loadPage(selectedId: number | null): void {
@@ -192,11 +180,6 @@ export class TicketTrackingPageComponent {
         this.applyTicketSelection(selected);
       } else {
         this.selectedTicket.set(null);
-      }
-
-      if (users.length) {
-        this.interventionUserId.set(this.interventionUserId() ?? users[0].id);
-        this.adminId.set(this.adminId() ?? users[0].id);
       }
 
       this.isLoading.set(false);

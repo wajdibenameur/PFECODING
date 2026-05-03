@@ -16,12 +16,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import java.util.List;
 
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
-
 @Service
 public class AuthService {
 
@@ -54,32 +48,11 @@ public class AuthService {
         params.add("username", request.getUsername());
         params.add("password", request.getPassword());
 
-        System.out.println("USERNAME = " + request.getUsername());
-        System.out.println("PASSWORD = " + request.getPassword());
-        System.out.println("CLIENT_ID = " + properties.getClientId());
-        System.out.println("CLIENT_SECRET = " + properties.getClientSecret());
-        System.out.println("REALM = " + properties.getRealm());
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        HttpEntity<MultiValueMap<String, String>> entity =
-                new HttpEntity<>(params, headers);
-
         try {
-            return new RestTemplate().postForObject(
-                    properties.getBaseUrl()
-                            + "/realms/" + properties.getRealm()
-                            + "/protocol/openid-connect/token",
-                    entity,
-                    TokenResponse.class
-            );
-        } catch (HttpClientErrorException e) {
-            System.out.println("KEYCLOAK ERROR STATUS = " + e.getStatusCode());
-            System.out.println("KEYCLOAK ERROR BODY = " + e.getResponseBodyAsString());
+            return tokenClient.obtainToken(properties.getRealm(), params);
+        } catch (FeignException.Unauthorized | FeignException.BadRequest e) {
             throw new AuthenticationException("Invalid username or password");
-        } catch (Exception e) {
-            System.out.println("LOGIN ERROR = " + e.getMessage());
+        } catch (FeignException e) {
             throw new KeycloakIntegrationException("Login failed: " + e.getMessage(), e);
         }
     }

@@ -14,21 +14,21 @@ import java.util.Optional;
 
 public interface TicketService {
 
-    Ticket createFromProblem(ZabbixProblemDTO problem, Long creatorId);
+    Ticket createFromProblem(ZabbixProblemDTO problem);
 
-    Ticket createManual(Ticket ticket, Long creatorId);
+    Ticket createManual(Ticket ticket);
 
     Ticket assign(Long ticketId, Long userId);
 
     Ticket updateStatus(Long ticketId, TicketStatus status, String resolution);
 
-    Ticket validate(Long ticketId, Long adminId);
+    Ticket validate(Long ticketId);
 
-    Ticket reject(Long ticketId, Long adminId, String reason);
+    Ticket reject(Long ticketId, String reason);
 
-    Ticket addComment(Long ticketId, String comment, Long userId);
+    Ticket addComment(Long ticketId, String comment);
 
-    Intervention addIntervention(Long ticketId, Long userId, String action, String comment, String result);
+    Intervention addIntervention(Long ticketId, String action, String comment, String result);
 
     Page<Ticket> search(TicketStatus status, Priority priority, String source, Pageable pageable);
 

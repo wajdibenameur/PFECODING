@@ -19,6 +19,7 @@ import tn.iteam.exception.TicketingException;
 import tn.iteam.repository.InterventionRepository;
 import tn.iteam.repository.TicketRepository;
 import tn.iteam.repository.UserRepository;
+import tn.iteam.security.AuthenticatedUserService;
 import tn.iteam.service.TicketService;
 
 import jakarta.persistence.criteria.Predicate;
@@ -38,11 +39,12 @@ public class TicketServiceImpl implements TicketService {
     private final UserRepository userRepository;
     private final InterventionRepository interventionRepository;
     private final SimpMessagingTemplate ws;
+    private final AuthenticatedUserService authenticatedUserService;
 
     // ================= CREATE FROM ZABBIX =================
     @Override
-    public Ticket createFromProblem(ZabbixProblemDTO problem, Long creatorId) {
-        User creator = getUserOrThrow(creatorId);
+    public Ticket createFromProblem(ZabbixProblemDTO problem) {
+        User creator = authenticatedUserService.getCurrentUser();
 
         Ticket ticket = Ticket.builder()
                 .title(problem.getDescription())
@@ -67,8 +69,8 @@ public class TicketServiceImpl implements TicketService {
 
     // ================= CREATE MANUAL =================
     @Override
-    public Ticket createManual(Ticket ticket, Long creatorId) {
-        User creator = getUserOrThrow(creatorId);
+    public Ticket createManual(Ticket ticket) {
+        User creator = authenticatedUserService.getCurrentUser();
         ticket.setCreationDate(LocalDateTime.now());
         ticket.setCreatedBy(creator);
         ticket.setStatus(TicketStatus.OPEN);
@@ -121,9 +123,8 @@ public class TicketServiceImpl implements TicketService {
 
     // ================= VALIDATE =================
     @Override
-    public Ticket validate(Long ticketId, Long adminId) {
-        User admin = getUserOrThrow(adminId);
-
+    public Ticket validate(Long ticketId) {
+        User admin = authenticatedUserService.getCurrentUser();
         Ticket ticket = getTicketOrThrow(ticketId);
 
         ensureTransitionAllowed(ticket.getStatus(), TicketStatus.VALIDATED);
@@ -140,9 +141,8 @@ public class TicketServiceImpl implements TicketService {
 
     // ================= REJECT =================
     @Override
-    public Ticket reject(Long ticketId, Long adminId, String reason) {
-        User admin = getUserOrThrow(adminId);
-
+    public Ticket reject(Long ticketId, String reason) {
+        User admin = authenticatedUserService.getCurrentUser();
         Ticket ticket = getTicketOrThrow(ticketId);
 
         ensureTransitionAllowed(ticket.getStatus(), TicketStatus.REJECTED);
@@ -160,9 +160,8 @@ public class TicketServiceImpl implements TicketService {
 
     // ================= COMMENT =================
     @Override
-    public Ticket addComment(Long ticketId, String comment, Long userId) {
-        User user = getUserOrThrow(userId);
-
+    public Ticket addComment(Long ticketId, String comment) {
+        User user = authenticatedUserService.getCurrentUser();
         Ticket ticket = getTicketOrThrow(ticketId);
 
         recordIntervention(ticket, user, "COMMENT", comment, null);
@@ -174,8 +173,8 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
-    public Intervention addIntervention(Long ticketId, Long userId, String action, String comment, String result) {
-        User user = getUserOrThrow(userId);
+    public Intervention addIntervention(Long ticketId, String action, String comment, String result) {
+        User user = authenticatedUserService.getCurrentUser();
         Ticket ticket = getTicketOrThrow(ticketId);
 
         Intervention intervention = recordIntervention(ticket, user, action, comment, result);

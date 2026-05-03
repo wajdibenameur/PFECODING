@@ -10,7 +10,6 @@ export interface TicketCreatePayload {
   title: string;
   description: string;
   priority: TicketPriority;
-  creatorId: number;
   hostId?: number | null;
   monitoringSource?: string | null;
   externalProblemId?: string | null;
@@ -36,14 +35,12 @@ export interface TicketAssignmentPayload {
 }
 
 export interface TicketInterventionPayload {
-  userId: number;
   action: string;
   comment: string;
   result?: string | null;
 }
 
 export interface TicketDecisionPayload {
-  adminId: number;
   reason?: string | null;
 }
 

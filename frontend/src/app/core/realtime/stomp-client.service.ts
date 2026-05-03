@@ -4,6 +4,7 @@ import SockJS from 'sockjs-client';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { filter, switchMap } from 'rxjs/operators';
 import { APP_CONFIG, AppConfig } from '../config/app-config.token';
+import { AUTH_CONTEXT, AuthContextPort } from '../auth/auth-context.port';
 import { RealtimeConnectionStore } from './realtime-connection.store';
 
 @Injectable({ providedIn: 'root' })
@@ -13,6 +14,7 @@ export class StompClientService {
 
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(AUTH_CONTEXT) private readonly authContext: AuthContextPort,
     private readonly connectionStore: RealtimeConnectionStore
   ) {}
 
@@ -49,10 +51,19 @@ export class StompClientService {
     }
 
     const wsUrl = `${this.config.monitoringApiUrl}/ws`;
+    const token = this.authContext.getAccessToken();
+    if (!token) {
+      this.connectionStore.setError('Authentication token is required for realtime connection');
+      return;
+    }
+
     this.connectionStore.setConnecting();
 
     const client = new Client({
-      webSocketFactory: () => new SockJS(wsUrl),
+      webSocketFactory: () => new SockJS(`${wsUrl}?access_token=${encodeURIComponent(token)}`),
+      connectHeaders: {
+        Authorization: `Bearer ${token}`
+      },
       reconnectDelay: 5000
     });
 

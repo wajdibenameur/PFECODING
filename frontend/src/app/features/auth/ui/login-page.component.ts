@@ -4,6 +4,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { APP_CONFIG, AppConfig } from '../../../core/config/app-config.token';
+import { AUTH_CONTEXT } from '../../../core/auth/auth-context.port';
 
 @Component({
   selector: 'app-login-page',
@@ -100,6 +101,7 @@ export class LoginPageComponent {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly config = inject<AppConfig>(APP_CONFIG);
+  private readonly authContext = inject(AUTH_CONTEXT);
 
   readonly loginForm = this.fb.group({
     username: ['', Validators.required],
@@ -120,9 +122,7 @@ export class LoginPageComponent {
     this.http.post('/api/auth/login', { username, password })
       .subscribe({
         next: (response: any) => {
-          // Store tokens
-          localStorage.setItem('accessToken', response.access_token);
-          localStorage.setItem('refreshToken', response.refresh_token);
+          this.authContext.setTokens(response.access_token, response.refresh_token ?? null);
 
           // Redirect based on role
           const roles = this.extractRolesFromToken(response.access_token);
@@ -138,16 +138,18 @@ export class LoginPageComponent {
   private extractRolesFromToken(token: string): string[] {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.realm_access?.roles || [];
+      return ((payload.realm_access?.roles || []) as string[]).map((role) =>
+        String(role).trim().toUpperCase()
+      );
     } catch {
       return [];
     }
   }
 
   private redirectBasedOnRole(roles: string[]): void {
-    if (roles.includes('superadmin') || roles.includes('admin')) {
+    if (roles.includes('SUPERADMIN') || roles.includes('ADMIN')) {
       this.router.navigate(['/admin']);
-    } else if (roles.includes('support')) {
+    } else if (roles.includes('SUPPORT')) {
       this.router.navigate(['/dashboard']);
     } else {
       this.router.navigate(['/dashboard']);

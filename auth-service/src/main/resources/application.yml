@@ -25,11 +25,9 @@ management:
 #  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:change-me}
 
 keycloak:
-  base-url: http://localhost:8091
-  realm: my-realm
-
-  client-id: auth-service
-  client-secret: qyACT7tiLX26GNHftpwz3EUYRQEWxazN
-
-  admin-client-id: auth-service-admin
-  admin-client-secret: RcP60YEV6ku0kC3t9Rt1MXtIYwunM3QS
+  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8091}
+  realm: ${KEYCLOAK_REALM:my-realm}
+  client-id: ${KEYCLOAK_CLIENT_ID:auth-service}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+  admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:auth-service-admin}
+  admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}

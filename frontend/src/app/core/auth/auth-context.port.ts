@@ -13,6 +13,8 @@ export interface AuthContextPort {
   getAccessToken(): string | null;
   getRoles(): string[];
   hasRole(role: string): boolean;
+  setTokens(accessToken: string, refreshToken: string | null): void;
+  logout(): void;
 }
 
 export const AUTH_CONTEXT = new InjectionToken<AuthContextPort>('AUTH_CONTEXT');

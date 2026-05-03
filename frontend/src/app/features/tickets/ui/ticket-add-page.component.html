@@ -3,7 +3,7 @@
     <div>
       <p class="eyebrow">Ticket Manager</p>
       <h1>Create Ticket</h1>
-      <p>Create a manual ticket with optional monitoring context and assign a creator from the seeded users.</p>
+      <p>Create a manual ticket with optional monitoring context using the authenticated operator identity.</p>
     </div>
     <a routerLink="/tickets/list" class="ghost-link">Back to List</a>
   </section>
@@ -14,7 +14,7 @@
 
   <section class="form-panel">
     @if (isLoading()) {
-      <p class="empty">Loading ticket users...</p>
+      <p class="empty">Preparing ticket form...</p>
     } @else {
       <div class="form-grid">
         <label>
@@ -34,16 +34,6 @@
         <label class="wide">
           <span>Description</span>
           <textarea rows="5" [ngModel]="description()" (ngModelChange)="description.set($event)"></textarea>
-        </label>
-
-        <label>
-          <span>Creator</span>
-          <select [ngModel]="creatorId()" (ngModelChange)="parseUserId($event)">
-            <option [ngValue]="null">Select creator</option>
-            @for (user of users(); track user.id) {
-              <option [ngValue]="user.id">{{ user.username }} ({{ user.role ?? 'NO_ROLE' }})</option>
-            }
-          </select>
         </label>
 
         <label>

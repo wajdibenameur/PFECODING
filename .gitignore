@@ -87,3 +87,7 @@ Backend/src/UML/
 !.env.example
 /auth-service/.env
 /frontend/.env
+
+
+auth-service/target/
+Backend/target/
