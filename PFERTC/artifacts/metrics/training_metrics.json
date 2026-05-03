@@ -1,0 +1,39 @@
+{
+  "accuracy": 1.0,
+  "f1_macro": 0.3333333333333333,
+  "confusion_matrix": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "feature_order": [
+    "problem_count_last_1h",
+    "problem_count_last_24h",
+    "avg_metric_last_1h",
+    "max_metric_last_1h",
+    "trend_metric"
+  ],
+  "train_size": 6,
+  "test_size": 2,
+  "test_timestamps": [
+    1776177506,
+    1776177547
+  ],
+  "class_counts_train": [
+    0,
+    6,
+    0
+  ]
+}

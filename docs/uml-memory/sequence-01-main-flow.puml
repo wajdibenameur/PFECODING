@@ -1,0 +1,82 @@
+@startuml
+title Global Dashboard Main Flow
+
+actor "Monitoring Operator" as User
+boundary "MonitoringDashboardPageComponent" as Page
+control "MonitoringStore" as Store
+control "MonitoringApiService" as Api
+control "MonitoringRealtimeService" as Realtime
+control "StompClientService" as Stomp
+control "MonitoringController" as Controller
+control "MonitoringAggregationService" as Aggregation
+control "MonitoringCacheService" as Cache
+database "SnapshotStore" as Snapshots
+control "SourceAvailabilityService" as Availability
+
+User -> Page : open /dashboard
+Page -> Store : loadSnapshot()
+
+par hosts
+  Store -> Api : getMonitoringHostsResponse()
+  Api -> Controller : GET /api/monitoring/hosts
+  Controller -> Aggregation : getHosts(null)
+  Aggregation -> Cache : getHosts(null)
+  Cache -> Snapshots : get("hosts", source*)
+  Snapshots --> Cache : StoredSnapshot<List<UnifiedMonitoringHostDTO>>
+  Cache --> Aggregation : FetchResult
+  Aggregation --> Controller : UnifiedMonitoringResponse<HostDTO>
+  Controller --> Api : HTTP 200
+  Api --> Store : hostsResponse
+else problems
+  Store -> Api : getMonitoringProblemsResponse()
+  Api -> Controller : GET /api/monitoring/problems
+  Controller -> Aggregation : getProblems(null)
+  Aggregation -> Cache : getProblems(null)
+  Cache -> Snapshots : get("problems", source*)
+  Snapshots --> Cache : StoredSnapshot<List<UnifiedMonitoringProblemDTO>>
+  Cache --> Aggregation : FetchResult
+  Aggregation --> Controller : UnifiedMonitoringResponse<ProblemDTO>
+  Controller --> Api : HTTP 200
+  Api --> Store : problemsResponse
+else metrics
+  Store -> Api : getMonitoringMetricsResponse()
+  Api -> Controller : GET /api/monitoring/metrics
+  Controller -> Aggregation : getMetrics(null)
+  Aggregation -> Cache : getMetrics(null)
+  Cache -> Snapshots : get("metrics", source*)
+  Snapshots --> Cache : StoredSnapshot<List<UnifiedMonitoringMetricDTO>>
+  Cache --> Aggregation : FetchResult
+  Aggregation --> Controller : UnifiedMonitoringResponse<MetricDTO>
+  Controller --> Api : HTTP 200
+  Api --> Store : metricsResponse
+else source health
+  Store -> Api : getSourceHealth()
+  Api -> Controller : GET /api/monitoring/sources/health
+  Controller -> Availability : getAll()
+  Availability --> Controller : List<SourceAvailabilityDTO>
+  Controller --> Api : HTTP 200
+  Api --> Store : sourceHealth
+end
+
+Store -> Store : merge snapshots\ncompute KPIs and metadata
+Store --> Page : expose dashboard view models
+
+Page -> Store : bindRealtime()
+Store -> Realtime : monitoringProblems$()
+Realtime -> Stomp : subscribe("/topic/monitoring/problems")
+Store -> Realtime : monitoringMetrics$()
+Realtime -> Stomp : subscribe("/topic/monitoring/metrics")
+Store -> Realtime : monitoringSources$()
+Realtime -> Stomp : subscribe("/topic/monitoring/sources")
+
+opt metrics event received
+  Stomp --> Realtime : UnifiedMonitoringMetricDTO[]
+  Realtime --> Store : metrics stream emission
+  Store -> Store : mergeMetrics()\nmark metrics freshness = live
+end
+
+opt source degraded or missing
+  Store -> Store : use snapshot_fallback\nor snapshot_missing in metadata
+end
+
+@enduml

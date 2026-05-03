@@ -6,7 +6,8 @@ export const authHeaderInterceptor: HttpInterceptorFn = (request, next) => {
   const authContext = inject(AUTH_CONTEXT);
   const token = authContext.getAccessToken();
 
-  if (!token) {
+  // Skip adding token for login endpoint
+  if (!token || request.url.includes('/api/auth/login')) {
     return next(request);
   }
 

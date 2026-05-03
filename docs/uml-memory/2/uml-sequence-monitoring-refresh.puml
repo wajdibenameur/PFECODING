@@ -1,0 +1,38 @@
+@startuml
+actor Client
+participant MonitoringController
+participant IntegrationServiceRegistry
+participant ZabbixIntegrationService
+participant ObserviumIntegrationService
+participant ZkBioRefreshOrchestrationService
+participant CameraIntegrationService
+participant SnapshotStore
+participant MonitoringSnapshotPublicationService
+
+Client -> MonitoringController : POST /api/monitoring/collect
+MonitoringController -> IntegrationServiceRegistry : getRequired(ZABBIX)
+IntegrationServiceRegistry --> MonitoringController : ZabbixIntegrationService
+MonitoringController -> ZabbixIntegrationService : refreshAsync()
+ZabbixIntegrationService -> SnapshotStore : save hosts / problems / metrics
+
+MonitoringController -> IntegrationServiceRegistry : getRequired(OBSERVIUM)
+IntegrationServiceRegistry --> MonitoringController : ObserviumIntegrationService
+MonitoringController -> ObserviumIntegrationService : refreshAsync()
+ObserviumIntegrationService -> SnapshotStore : save hosts / problems / metrics
+
+MonitoringController -> ZkBioRefreshOrchestrationService : refreshMonitoringAndAttendanceAsync()
+ZkBioRefreshOrchestrationService -> SnapshotStore : save monitoring + attendance snapshots
+
+MonitoringController -> IntegrationServiceRegistry : getRequired(CAMERA)
+IntegrationServiceRegistry --> MonitoringController : CameraIntegrationService
+MonitoringController -> CameraIntegrationService : refreshAsync()
+CameraIntegrationService -> SnapshotStore : save hosts snapshot
+
+MonitoringController -> MonitoringSnapshotPublicationService : publishMonitoringSnapshots(ZABBIX, OBSERVIUM, ZKBIO)
+MonitoringController -> MonitoringSnapshotPublicationService : publishZkBioSnapshots()
+MonitoringController --> Client : ApiResponse<Void>
+
+note bottom
+Publication occurs after completion of the combined refresh pipeline.
+end note
+@enduml

@@ -1,0 +1,43 @@
+@startuml
+skinparam classAttributeIconSize 0
+hide empty members
+
+class User {
+  username
+  email
+}
+
+class Role {
+  name
+}
+
+enum RoleName {
+  ADMINISTRATOR
+  VIEWER_SUPPORT
+  SUPERADMIN
+}
+
+enum Permission {
+  MANAGE_TICKETS
+  MANAGE_USERS
+  MANAGE_ROLES
+}
+
+class TicketingBootstrapConfiguration
+class TicketController
+class TicketServiceImpl
+
+User "many" -- "many" Role
+Role --> RoleName
+Role --> Permission
+
+TicketController --> TicketServiceImpl
+TicketingBootstrapConfiguration --> User
+TicketingBootstrapConfiguration --> Role
+
+note bottom of TicketingBootstrapConfiguration
+Bootstraps users and roles.
+No runtime authorization layer
+is present in the analysed code.
+end note
+@enduml

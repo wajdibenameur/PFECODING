@@ -11,6 +11,8 @@ export interface AuthContextPort {
   readonly isAuthenticated$: Observable<boolean>;
   readonly user$: Observable<AuthUser | null>;
   getAccessToken(): string | null;
+  getRoles(): string[];
+  hasRole(role: string): boolean;
 }
 
 export const AUTH_CONTEXT = new InjectionToken<AuthContextPort>('AUTH_CONTEXT');

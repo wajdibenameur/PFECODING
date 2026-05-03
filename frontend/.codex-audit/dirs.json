@@ -1,0 +1,172 @@
+[
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\adapter",
+        "JavaFileCount":  0,
+        "SubDirCount":  4
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\cache",
+        "JavaFileCount":  0,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\client",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\config",
+        "JavaFileCount":  9,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\controller",
+        "JavaFileCount":  8,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\domain",
+        "JavaFileCount":  14,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\dto",
+        "JavaFileCount":  22,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\enums",
+        "JavaFileCount":  4,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\exception",
+        "JavaFileCount":  7,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\integration",
+        "JavaFileCount":  9,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\listener",
+        "JavaFileCount":  0,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\logging",
+        "JavaFileCount":  0,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\mapper",
+        "JavaFileCount":  13,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\ml",
+        "JavaFileCount":  0,
+        "SubDirCount":  4
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\monitoring",
+        "JavaFileCount":  1,
+        "SubDirCount":  4
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\repository",
+        "JavaFileCount":  12,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\scheduler",
+        "JavaFileCount":  4,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\service",
+        "JavaFileCount":  16,
+        "SubDirCount":  2
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\util",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\websocket",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\adapter\\camera",
+        "JavaFileCount":  1,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\adapter\\observium",
+        "JavaFileCount":  1,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\adapter\\zabbix",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\adapter\\zkbio",
+        "JavaFileCount":  1,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\ml\\config",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\ml\\controller",
+        "JavaFileCount":  1,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\ml\\dto",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\ml\\service",
+        "JavaFileCount":  1,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\monitoring\\dto",
+        "JavaFileCount":  4,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\monitoring\\provider",
+        "JavaFileCount":  0,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\monitoring\\service",
+        "JavaFileCount":  2,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\monitoring\\snapshot",
+        "JavaFileCount":  3,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\service\\impl",
+        "JavaFileCount":  12,
+        "SubDirCount":  0
+    },
+    {
+        "Relative":  "src\\main\\java\\tn\\iteam\\service\\support",
+        "JavaFileCount":  3,
+        "SubDirCount":  0
+    }
+]

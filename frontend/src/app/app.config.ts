@@ -8,6 +8,7 @@ import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { APP_CONFIG, appConfigValue } from './core/config/app-config.token';
 import { AUTH_CONTEXT } from './core/auth/auth-context.port';
+import { RealAuthContextService } from './core/auth/real-auth-context.service';
 import { NoopAuthContextService } from './core/auth/noop-auth-context.service';
 import { authHeaderInterceptor } from './core/http/auth-header.interceptor';
 
@@ -18,6 +19,6 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withInterceptors([authHeaderInterceptor])),
     { provide: APP_CONFIG, useValue: appConfigValue },
-    { provide: AUTH_CONTEXT, useClass: NoopAuthContextService }
+    { provide: AUTH_CONTEXT, useClass: RealAuthContextService }
   ]
 };

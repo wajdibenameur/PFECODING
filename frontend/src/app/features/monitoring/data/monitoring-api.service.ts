@@ -27,10 +27,10 @@ export class MonitoringApiService {
     private readonly http: HttpClient,
     @Inject(APP_CONFIG) config: AppConfig
   ) {
-    this.monitoringBaseUrl = `${config.apiBaseUrl}/api/monitoring`;
-    this.cameraBaseUrl = `${config.apiBaseUrl}/api/cameras`;
-    this.zkbioBaseUrl = `${config.apiBaseUrl}/api/zkbio`;
-    this.dashboardBaseUrl = `${config.apiBaseUrl}/dashboard`;
+    this.monitoringBaseUrl = `${config.monitoringApiUrl}/api/monitoring`;
+    this.cameraBaseUrl = `${config.monitoringApiUrl}/api/cameras`;
+    this.zkbioBaseUrl = `${config.monitoringApiUrl}/api/zkbio`;
+    this.dashboardBaseUrl = `${config.monitoringApiUrl}/dashboard`;
   }
 
   getSourceHealth(): Observable<SourceAvailability[]> {

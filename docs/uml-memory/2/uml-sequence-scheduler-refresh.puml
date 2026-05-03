@@ -1,0 +1,22 @@
+@startuml
+participant ZabbixScheduler
+participant SourceAvailabilityServiceImpl as Availability
+participant IntegrationServiceRegistry as Registry
+participant ZabbixIntegrationService as Zabbix
+participant SnapshotStore
+participant MonitoringSnapshotPublicationService as Publisher
+
+ZabbixScheduler -> Availability : shouldAttempt("ZABBIX", retryBackoffMs)
+alt cooldown active
+  Availability --> ZabbixScheduler : false
+  ZabbixScheduler -> ZabbixScheduler : log skip
+else refresh allowed
+  Availability --> ZabbixScheduler : true
+  ZabbixScheduler -> Registry : getRequired(ZABBIX)
+  Registry --> ZabbixScheduler : ZabbixIntegrationService
+  ZabbixScheduler -> Zabbix : refreshMetricsAsync()
+  Zabbix -> SnapshotStore : save metrics snapshot or fallback
+  Zabbix --> ZabbixScheduler : completion
+  ZabbixScheduler -> Publisher : publishMetricsSnapshot(ZABBIX)
+end
+@enduml

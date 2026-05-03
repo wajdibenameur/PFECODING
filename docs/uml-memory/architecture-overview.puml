@@ -1,0 +1,165 @@
+@startuml
+title PFE Monitoring System - Logical Architecture
+skinparam componentStyle rectangle
+
+actor "Monitoring Operator" as User
+
+package "Angular Frontend" {
+  component "MonitoringDashboardPageComponent" as DashboardPage
+  component "MonitoringZabbixPageComponent" as ZabbixPage
+  component "MonitoringObserviumPageComponent" as ObserviumPage
+  component "MonitoringZkBioPageComponent" as ZkBioPage
+  component "MonitoringStore" as MonitoringStore
+  component "ZabbixWorkspaceStore" as ZabbixStore
+  component "MonitoringApiService" as ApiService
+  component "MonitoringRealtimeService" as RealtimeService
+  component "StompClientService" as StompService
+}
+
+package "Spring Boot Backend" {
+  package "REST API" {
+    component "MonitoringController" as MonitoringController
+    component "ZkBioController" as ZkBioController
+    component "DashboardController" as DashboardController
+    component "TicketController" as TicketController
+    component "Compatibility Controllers\n/api/zabbix/*, /api/observium/*" as CompatControllers
+  }
+
+  package "Monitoring Core" {
+    component "MonitoringAggregationService" as Aggregation
+    component "MonitoringCacheService" as Cache
+    component "SnapshotStore" as SnapshotStore
+    component "InMemorySnapshotStore" as MemoryStore
+    component "SourceAvailabilityServiceImpl" as Availability
+    component "MonitoringWebSocketPublisher" as MonitoringPublisher
+    component "ZkBioWebSocketPublisher" as ZkBioPublisher
+    component "MonitoringStartup" as Startup
+    component "Schedulers\nZabbix/Observium/ZKBio" as Schedulers
+  }
+
+  package "Integration Layer" {
+    component "ZabbixIntegrationService" as ZabbixIntegration
+    component "ObserviumIntegrationService" as ObserviumIntegration
+    component "ZkBioIntegrationService" as ZkBioIntegration
+    component "CameraIntegrationService" as CameraIntegration
+    component "ZabbixAdapter / ZabbixClient" as ZabbixAccess
+    component "ObserviumAdapter / ObserviumClientX" as ObserviumAccess
+    component "ZkBioAdapter / ZkBioClientX" as ZkBioAccess
+  }
+
+  package "Business And Analytics" {
+    component "DashboardServiceImpl" as DashboardService
+    component "TorchScriptPredictionService" as MlService
+    component "TicketServiceImpl" as TicketService
+    component "ZkBioServiceImpl" as ZkBioBusiness
+  }
+
+  package "Configuration" {
+    component "WebSocketConfig" as WebSocketConfig
+    component "RedisOptionalConfiguration" as RedisConfig
+  }
+}
+
+database "MySQL" as MySQL
+component "Simple Broker\n/topic over /ws" as Broker
+cloud "Zabbix API" as ZabbixApi
+cloud "Observium API" as ObserviumApi
+cloud "ZKBio API" as ZKBioApi
+cloud "Camera Subnet" as CameraSubnet
+database "Redis (optional)" as Redis
+
+User --> DashboardPage
+User --> ZabbixPage
+User --> ObserviumPage
+User --> ZkBioPage
+
+DashboardPage --> MonitoringStore
+ZabbixPage --> ZabbixStore
+ObserviumPage --> ApiService
+ObserviumPage --> RealtimeService
+ZkBioPage --> ApiService
+ZkBioPage --> RealtimeService
+
+MonitoringStore --> ApiService
+MonitoringStore --> RealtimeService
+ZabbixStore --> ApiService
+ZabbixStore --> RealtimeService
+RealtimeService --> StompService
+StompService --> Broker
+
+ApiService --> MonitoringController
+ApiService --> ZkBioController
+ApiService --> DashboardController
+
+MonitoringController --> Aggregation
+MonitoringController --> Availability
+MonitoringController --> ZabbixIntegration
+MonitoringController --> ObserviumIntegration
+MonitoringController --> ZkBioIntegration
+MonitoringController --> CameraIntegration
+MonitoringController --> MonitoringPublisher
+MonitoringController --> ZkBioPublisher
+
+ZkBioController --> ZkBioIntegration
+ZkBioController --> ZkBioBusiness
+DashboardController --> DashboardService
+TicketController --> TicketService
+CompatControllers --> Aggregation
+
+Aggregation --> Cache
+Cache --> SnapshotStore
+SnapshotStore --> MemoryStore
+Availability --> MonitoringPublisher
+MonitoringPublisher --> Broker
+ZkBioPublisher --> Broker
+WebSocketConfig --> Broker
+
+Startup --> ZabbixIntegration
+Startup --> ObserviumIntegration
+Startup --> ZkBioIntegration
+Startup --> CameraIntegration
+Startup --> MonitoringPublisher
+Startup --> ZkBioPublisher
+Schedulers --> ZabbixIntegration
+Schedulers --> ObserviumIntegration
+Schedulers --> ZkBioIntegration
+Schedulers --> MonitoringPublisher
+Schedulers --> ZkBioPublisher
+
+ZabbixIntegration --> ZabbixAccess
+ZabbixIntegration --> SnapshotStore
+ZabbixIntegration --> Availability
+ObserviumIntegration --> ObserviumAccess
+ObserviumIntegration --> SnapshotStore
+ObserviumIntegration --> Availability
+ZkBioIntegration --> ZkBioAccess
+ZkBioIntegration --> ZkBioBusiness
+ZkBioIntegration --> SnapshotStore
+ZkBioIntegration --> Availability
+ZkBioIntegration --> MonitoringPublisher
+ZkBioIntegration --> ZkBioPublisher
+CameraIntegration --> SnapshotStore
+CameraIntegration --> CameraSubnet
+
+ZabbixAccess --> ZabbixApi
+ObserviumAccess --> ObserviumApi
+ZkBioAccess --> ZKBioApi
+ZkBioBusiness --> ZKBioApi
+
+DashboardService --> MySQL
+DashboardService --> MlService
+TicketService --> MySQL
+TicketService --> Broker
+ZabbixIntegration --> MySQL
+ObserviumIntegration --> MySQL
+ZkBioIntegration --> MySQL
+CameraIntegration --> MySQL
+
+RedisConfig ..> Redis : conditional beans only
+
+note right of RedisConfig
+No active RedisSnapshotStore is present.
+Redis is opt-in and off the critical path.
+end note
+
+@enduml

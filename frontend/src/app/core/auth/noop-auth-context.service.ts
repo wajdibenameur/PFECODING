@@ -10,4 +10,12 @@ export class NoopAuthContextService implements AuthContextPort {
   getAccessToken(): string | null {
     return null;
   }
+
+  getRoles(): string[] {
+    return [];
+  }
+
+  hasRole(role: string): boolean {
+    return false;
+  }
 }

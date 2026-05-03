@@ -1,0 +1,51 @@
+@startuml
+title PFE Monitoring System - Use Case Diagram
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Monitoring Operator" as Operator
+actor "Support Agent" as Support
+actor "Administrator" as Admin
+actor "Zabbix Platform" as Zabbix
+actor "Observium Platform" as Observium
+actor "ZKBio Platform" as ZKBio
+actor "Camera Network" as Camera
+
+rectangle "PFE Monitoring System" {
+  usecase "Consult Unified Dashboard" as UC_Dashboard
+  usecase "View Source Availability" as UC_SourceHealth
+  usecase "View Unified Asset Inventory" as UC_Inventory
+  usecase "View Alert Summary" as UC_Alerts
+  usecase "Consult Zabbix Workspace" as UC_Zabbix
+  usecase "Review Predictions\nand Anomalies" as UC_ML
+  usecase "Consult Observium Workspace" as UC_Observium
+  usecase "Consult ZKBio Workspace" as UC_ZKBio
+  usecase "Trigger Unified\nMonitoring Collection" as UC_CollectAll
+  usecase "Trigger ZKBio\nCollection" as UC_CollectZKBio
+  usecase "Manage Tickets" as UC_Tickets
+}
+
+Operator --> UC_Dashboard
+Operator --> UC_Zabbix
+Operator --> UC_Observium
+Operator --> UC_ZKBio
+Operator --> UC_CollectAll
+Operator --> UC_CollectZKBio
+
+Support --> UC_Zabbix
+Support --> UC_Tickets
+
+Admin --> UC_Tickets
+
+Zabbix --> UC_CollectAll
+Observium --> UC_CollectAll
+ZKBio --> UC_CollectAll
+ZKBio --> UC_CollectZKBio
+Camera --> UC_CollectAll
+
+UC_Dashboard ..> UC_SourceHealth : <<include>>
+UC_Dashboard ..> UC_Inventory : <<include>>
+UC_Dashboard ..> UC_Alerts : <<include>>
+UC_Zabbix ..> UC_ML : <<include>>
+
+@enduml

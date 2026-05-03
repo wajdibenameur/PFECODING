@@ -1,0 +1,29 @@
+{
+  "feature_order": [
+    "problem_count_last_1h",
+    "problem_count_last_24h",
+    "avg_metric_last_1h",
+    "max_metric_last_1h",
+    "trend_metric"
+  ],
+  "feature_means": [
+    0.1666666716337204,
+    0.1666666716337204,
+    196654.5625,
+    3628110.75,
+    0.0
+  ],
+  "feature_stds": [
+    0.3726780116558075,
+    0.3726780116558075,
+    145871.53125,
+    2908742.5,
+    1.0
+  ],
+  "num_features": 5,
+  "label_mapping": {
+    "0": 1,
+    "1": 2,
+    "2": 3
+  }
+}

@@ -1,0 +1,20 @@
+@startuml
+actor Administrator as Admin
+participant MonitoringController
+participant IntegrationServiceRegistry
+participant ZkBioRefreshOrchestrationService
+participant "Source Integrations" as Integrations
+participant MonitoringSnapshotPublicationService as Publisher
+
+Admin -> MonitoringController : POST /api/monitoring/collect
+MonitoringController -> IntegrationServiceRegistry : getRequired(ZABBIX)
+MonitoringController -> IntegrationServiceRegistry : getRequired(OBSERVIUM)
+MonitoringController -> IntegrationServiceRegistry : getRequired(CAMERA)
+MonitoringController -> ZkBioRefreshOrchestrationService : refreshMonitoringAndAttendanceAsync()
+MonitoringController -> Integrations : refreshAsync() for ZABBIX, OBSERVIUM, CAMERA
+Integrations --> MonitoringController : completion / degraded completion
+ZkBioRefreshOrchestrationService --> MonitoringController : completion
+MonitoringController -> Publisher : publishMonitoringSnapshots(ZABBIX, OBSERVIUM, ZKBIO)
+MonitoringController -> Publisher : publishZkBioSnapshots()
+MonitoringController --> Admin : ApiResponse<Void>
+@enduml
