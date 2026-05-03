@@ -12,6 +12,7 @@ import {
 } from '../../../shared/ui/collection-control-bar/collection-control-bar.component';
 import { MonitoringApiService } from '../data/monitoring-api.service';
 import { MonitoringRealtimeService } from '../data/monitoring-realtime.service';
+import { findSourceAvailability } from '../data/monitoring-source.utils';
 
 @Component({
   selector: 'app-monitoring-camera-page',
@@ -138,9 +139,7 @@ export class MonitoringCameraPageComponent {
             `${left.ip ?? ''}:${left.port ?? ''}`.localeCompare(`${right.ip ?? ''}:${right.port ?? ''}`)
           )
         );
-        this.sourceAvailability.set(
-          sourceHealth.find((entry) => entry.source.toUpperCase() === 'CAMERA') ?? null
-        );
+        this.sourceAvailability.set(findSourceAvailability(sourceHealth, 'CAMERA'));
         this.lastRefresh.set(new Date());
         this.isLoading.set(false);
       }
@@ -153,11 +152,8 @@ export class MonitoringCameraPageComponent {
     }
     this.realtimeBound = true;
 
-    this.realtime.monitoringSources$().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.realtime.monitoringSourceHealth$('CAMERA').pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (incoming) => {
-        if (incoming.source.toUpperCase() !== 'CAMERA') {
-          return;
-        }
         this.sourceAvailability.set(incoming);
       },
       error: (error) => {

@@ -55,7 +55,7 @@ export class TicketManagerApiService {
     private readonly http: HttpClient,
     @Inject(APP_CONFIG) config: AppConfig
   ) {
-    this.ticketsBaseUrl = `${config.apiBaseUrl}/api/tickets`;
+    this.ticketsBaseUrl = `${config.monitoringApiUrl}/api/tickets`;
   }
 
   getTickets(filters: TicketFilters = {}): Observable<PageResponse<Ticket>> {

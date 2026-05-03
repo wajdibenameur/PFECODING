@@ -48,7 +48,7 @@ export class StompClientService {
       return;
     }
 
-    const wsUrl = `${this.config.apiBaseUrl}/ws`;
+    const wsUrl = `${this.config.monitoringApiUrl}/ws`;
     this.connectionStore.setConnecting();
 
     const client = new Client({
