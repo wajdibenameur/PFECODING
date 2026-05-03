@@ -24,7 +24,7 @@ Backend/nbbuild/
 # MAVEN
 # =====================
 Backend/.mvn/wrapper/maven-wrapper.jar
-
+Backend/target/
 # =====================
 # IDE - IntelliJ / Eclipse / STS
 # =====================
